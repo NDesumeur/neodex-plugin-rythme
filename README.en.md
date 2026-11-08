@@ -29,6 +29,7 @@ In **My music**, create a level from an imported **audio file** or a track from 
 ## Settings
 
 - Music **volume**.
+- **Hit sound**: the sound played on each note you hit, one of 10 (Soft, Clap, Wood, Kick, Crystal, Pop, Hi-hat, Snare, Pluck, Tock) or none. Losing a combo of 10 or more plays a « combo break » sound.
 - **Audio offset** (−300 to +300 ms): it adjusts itself after each game. If you hit late or early on average, the game corrects most of the gap; you can also change it by hand.
 
 ## Data and sync
