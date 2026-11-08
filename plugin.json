@@ -3,7 +3,7 @@
   "name": "Rythme",
   "version": "1.6.3",
   "author": "NDesumeur",
-  "description": "200 morceaux chiptune composés par le jeu, ou ta propre musique : frappe les notes sur 4 voies, en rythme.",
+  "description": "Jeu de rythme sur 4 voies : appuie sur D, F, J, K (ou les flèches) quand les notes touchent la ligne, et maintiens les notes longues. 200 morceaux composés et joués par le jeu, chacun en Facile, Normal, Difficile et Expert, ou des niveaux créés depuis un fichier audio ou ta bibliothèque NeoMusic. Parfait, Bien ou OK, combo, note de S à D et décalage réglé tout seul.",
   "icon": "icon.png",
   "entry": "index.js",
   "view": "rythme",
