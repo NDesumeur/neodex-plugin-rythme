@@ -827,7 +827,6 @@ function rhDraw() {
   px(g, '#2a1d52', 0, 16, W, 2); px(g, '#ff5ad9', 0, 16, Math.max(0, Math.min(1, now / rh.c.len)) * W, 2);
   if (rh.combo >= 5) pxFont(g, rh.combo + ' COMBO', W / 2, 120, '#ffffff', 10, 'center');
   if (rh.judge) pxFont(g, rh.judge.text, W / 2, 150 - (30 - rh.judge.t) / 3, rh.judge.color, 9, 'center');
-  if (rh.mode === 'play' && now < 0) pxFont(g, String(Math.ceil(-now)), W / 2, 190, '#ffd07a', 16, 'center');
   if (rh.mode === 'ready') gameText(g, W, [[title.toUpperCase(), '#ff5ad9', 8], [(RH_DIFFS[rh.diff] || 'Perso') + ' · ' + rh.stars + '★ · ' + rh.notes.length + ' notes', '#d9c6ff'], ['Espace ou clic : jouer', '#ffd07a'], ['Touches D F J K', '#8f7bb8']], 150);
   if (rh.mode === 'load') gameText(g, W, [['CHARGEMENT…', '#ffd07a', 10], ['La musique se prépare', '#d9c6ff']], 160);
   if (rh.mode === 'pause') gameText(g, W, [['PAUSE', '#ffffff', 12], ['Espace : reprendre', '#d9c6ff']], 160);
