@@ -1,7 +1,7 @@
 // Rythme : ton appli d'origine (HTML et code inchangés), livrée en plugin.
 // Ses données sont dans le dossier du plugin, que NeoDex sauvegarde (synchro cloud et sauvegardes) ; à la première ouverture elle reprend ce que tu avais dans NeoDex.
 // Elle tourne dans le bac à sable de NeoDex, avec ses outils d'interface (ctx.host) et seulement les autorisations de son plugin.json.
-const HTML = "<div class=\"appWrap wide\">\n      <div class=\"agHead\"><span class=\"label\">Rythme</span><span class=\"hint\">Touches D F J K (ou les flèches) · espace : jouer · P : pause</span></div>\n      <div class=\"rhMain\"><div class=\"gameBox tall\"><canvas id=\"rhCanvas\" width=\"240\" height=\"320\"></canvas><button class=\"btn px rhFs\" id=\"rhFs\">PLEIN ÉCRAN</button></div>\n        <div class=\"rhSide\"><div class=\"rhTabs\"><button class=\"tab px on\" id=\"rhTabSongs\">CHANSONS</button><button class=\"tab px\" id=\"rhTabMine\">MES MUSIQUES</button></div><div class=\"sysCard px rhImport\" id=\"rhImport\" style=\"display:none\"><div class=\"row\"><button class=\"btn main px\" id=\"rhFileBtn\">IMPORTER UN FICHIER AUDIO</button><input type=\"file\" id=\"rhFile\" accept=\"audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac,.webm\" hidden></div><div class=\"row\"><select class=\"f gSel\" id=\"rhMuList\"></select><button class=\"btn px\" id=\"rhMuBtn\">CRÉER LE NIVEAU</button></div><div class=\"row\"><label>Difficulté du niveau <select class=\"f gSel\" id=\"rhStars\"><option value=\"1\">★</option><option value=\"2\">★★</option><option value=\"3\" selected>★★★</option><option value=\"4\">★★★★</option><option value=\"5\">★★★★★</option><option value=\"6\">★★★★★★</option><option value=\"7\">★★★★★★★</option><option value=\"8\">★★★★★★★★</option><option value=\"9\">★★★★★★★★★</option><option value=\"10\">★★★★★★★★★★</option></select></label></div><span class=\"hint\" id=\"rhImpMsg\">Depuis un fichier ou une musique de NeoMusic : 4 niveaux sont créés à partir de son tempo et de ses temps forts.</span></div><div id=\"rhSongs\"></div><div class=\"sysCard px rhOpts\"><label>Volume <input type=\"range\" id=\"rhVol\" min=\"0\" max=\"100\" value=\"70\"></label><label>Décalage audio <input type=\"number\" class=\"f\" id=\"rhOffset\" min=\"-300\" max=\"300\" step=\"5\" value=\"0\" style=\"width:80px\" title=\"Réglé tout seul après chaque partie\"> ms (auto)</label></div></div></div>\n      <div class=\"hint\">Appuie quand la note touche la ligne, maintiens les notes longues. Le décalage audio se règle tout seul après chaque partie (tu peux aussi le changer à la main).</div>\n    </div>";
+const HTML = "<div class=\"appWrap wide\">\n      <div class=\"agHead\"><span class=\"label\">Rythme</span><span class=\"hint\">Touches D F J K (ou les flèches) · espace : jouer · P : pause</span></div>\n      <div class=\"rhMain\"><div class=\"gameBox tall\"><canvas id=\"rhCanvas\" width=\"240\" height=\"320\"></canvas><button class=\"btn px rhFs\" id=\"rhFs\">PLEIN ÉCRAN</button></div>\n        <div class=\"rhSide\"><div class=\"rhTabs\"><button class=\"tab px on\" id=\"rhTabSongs\">CHANSONS</button><button class=\"tab px\" id=\"rhTabMine\">MES MUSIQUES</button></div><div class=\"sysCard px rhImport\" id=\"rhImport\" style=\"display:none\"><div class=\"row\"><button class=\"btn main px\" id=\"rhFileBtn\">IMPORTER UN FICHIER AUDIO</button><input type=\"file\" id=\"rhFile\" accept=\"audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac,.webm\" hidden></div><div class=\"row\"><select class=\"f gSel\" id=\"rhMuList\"></select><button class=\"btn px\" id=\"rhMuBtn\">CRÉER LE NIVEAU</button></div><div class=\"row\"><label>Difficulté du niveau <select class=\"f gSel\" id=\"rhStars\"><option value=\"1\">★</option><option value=\"2\">★★</option><option value=\"3\" selected>★★★</option><option value=\"4\">★★★★</option><option value=\"5\">★★★★★</option><option value=\"6\">★★★★★★</option><option value=\"7\">★★★★★★★</option><option value=\"8\">★★★★★★★★</option><option value=\"9\">★★★★★★★★★</option><option value=\"10\">★★★★★★★★★★</option></select></label></div><span class=\"hint\" id=\"rhImpMsg\">Depuis un fichier ou une musique de NeoMusic : 4 niveaux sont créés à partir de son tempo et de ses temps forts.</span></div><div id=\"rhSongs\"></div><div class=\"sysCard px rhOpts\"><label>Volume <input type=\"range\" id=\"rhVol\" min=\"0\" max=\"100\" value=\"70\"></label><label>Son des clics <select class=\"f gSel\" id=\"rhClick\"><option value=\"0\" selected>Doux</option><option value=\"1\">Clap</option><option value=\"2\">Bois</option><option value=\"3\">Grosse caisse</option><option value=\"4\">Cristal</option><option value=\"5\">Pop</option><option value=\"6\">Charleston</option><option value=\"7\">Caisse claire</option><option value=\"8\">Pluck</option><option value=\"9\">Tok</option><option value=\"-1\">Aucun</option></select></label><label>Décalage audio <input type=\"number\" class=\"f\" id=\"rhOffset\" min=\"-300\" max=\"300\" step=\"5\" value=\"0\" style=\"width:80px\" title=\"Réglé tout seul après chaque partie\"> ms (auto)</label></div></div></div>\n      <div class=\"hint\">Appuie quand la note touche la ligne, maintiens les notes longues. Le décalage audio se règle tout seul après chaque partie (tu peux aussi le changer à la main).</div>\n    </div>";
 /*CSS-MOVED*/ const CSS = `.gameBox{position:relative}
 .rhFs{position:absolute;top:14px;right:14px;opacity:.85}
 .gameBox:fullscreen .rhFs{display:none}
@@ -612,11 +612,75 @@ async function rhAddImport(imp) {
 
 const RH_LEN = [];
 let rh = null, rhCtx = null, rhNoise = null, rhOut = null, rhTab = 'songs';
+// les sons de frappe : un clic à chaque note touchée (le son choisi dans les réglages) et un son « combo cassé » quand on perd un combo de 10 ou plus.
+// Calculés une fois à l'ouverture du son (rien à préparer au moment de frapper) : une attaque, un corps, une petite réverbération en stéréo, tous à la même force entendue
+let rhKit = null;
+function rhKitMake() {
+  const sr = rhCtx.sampleRate, P = 2 * Math.PI, E = Math.exp, S = Math.sin, rn = seeded(7), nz = () => rn() * 2 - 1;
+  const bq = (type, f, q = .707) => {  // un filtre (passe-bas, passe-haut ou passe-bande), formules classiques des égaliseurs
+    const w = P * Math.min(f, sr * .45) / sr, cw = Math.cos(w), al = Math.sin(w) / (2 * q), a0 = 1 + al, a1 = -2 * cw, a2 = 1 - al;
+    const [b0, b1, b2] = type === 'lp' ? [(1 - cw) / 2, 1 - cw, (1 - cw) / 2] : type === 'hp' ? [(1 + cw) / 2, -(1 + cw), (1 + cw) / 2] : [al, 0, -al];
+    let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+    return x => { const y = (b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0; x2 = x1; x1 = x; y2 = y1; y1 = y; return y; };
+  };
+  const env = (t, a, d) => t < a ? t / a : E(-(t - a) / d);  // monte en a secondes, retombe en d
+  const glide = (t, f0, f1, k) => P * (f1 * t + (f0 - f1) * (1 - E(-k * t)) / k);  // la phase d'une note qui glisse de f0 vers f1
+  const tick = (f, q, d) => { const b = bq('bp', f, q); return t => b(nz()) * E(-t / d); };  // l'attaque : un souffle très court
+  // une petite pièce (réverbération courte, un peu différente à gauche et à droite) : le son respire au lieu de claquer à sec
+  const room = (x, wet) => {
+    const out = [0, 1].map(ch => {
+      const y = new Float32Array(x.length), combs = [29.7, 37.1, 41.1, 43.7].map(ms => ({b: new Float32Array(Math.round((ms + ch * 1.7) * sr / 1000)), i: 0, lp: 0}));
+      const aps = [5.1, 1.7].map(ms => ({b: new Float32Array(Math.round((ms + ch * .4) * sr / 1000)), i: 0}));
+      for (let n = 0; n < x.length; n++) {
+        let s = 0; for (const c of combs) { const o = c.b[c.i]; c.lp += (o - c.lp) * .55; c.b[c.i] = x[n] + c.lp * .74; c.i = (c.i + 1) % c.b.length; s += o; }
+        s /= 4; for (const a of aps) { const o = a.b[a.i], v = s + o * .6; a.b[a.i] = v; a.i = (a.i + 1) % a.b.length; s = o - v * .6; }
+        y[n] = x[n] + s * wet;
+      }
+      return y;
+    });
+    return out;
+  };
+  const mk = (dur, wet, drive, f) => {
+    const n = Math.ceil((dur + .3) * sr), x = new Float32Array(n), m = Math.ceil(dur * sr);
+    for (let i = 0; i < m; i++) { const t = i / sr; x[i] = Math.tanh(f(t) * drive) / Math.tanh(drive) * Math.min(1, (m - i) / (sr * .004)); }  // un peu de saturation : plus chaud et plus rond
+    const [L, R] = room(x, wet), b = rhCtx.createBuffer(2, n, sr);
+    let pk = 0, e = 0; const body = Math.min(n, Math.round(sr * .03)); for (let i = 0; i < n; i++) { pk = Math.max(pk, Math.abs(L[i]), Math.abs(R[i])); if (i < body) e += L[i] * L[i]; }
+    const k = Math.min(.95 / (pk || 1), .24 / (Math.sqrt(e / body) || 1)), fade = Math.round(sr * .05);  // même force entendue pour tous
+    for (let i = 0; i < n; i++) { const g = k * Math.min(1, (n - i) / fade); L[i] *= g; R[i] *= g; }
+    b.getChannelData(0).set(L); b.getChannelData(1).set(R); return b;
+  };
+  const doux = tick(5200, .8, .0015), clap = bq('bp', 1250, 1.3), clapS = bq('hp', 6000), bois = tick(3200, 1, .0012), kick = tick(2600, .7, .0025);
+  const hat = [bq('hp', 7200), bq('hp', 7200), bq('bp', 10000, .9)], sn = bq('bp', 3300, .8), sn2 = bq('hp', 7000), tok = tick(4200, 1.4, .0016);
+  const pluck = [523.25, 783.99].map(f => { const b = new Float32Array(Math.round(sr / f)), lp = bq('lp', 3500); for (let i = 0; i < b.length; i++) b[i] = lp(nz()); return {b, i: 0}; });
+  const brk = bq('lp', 1800), brkN = bq('bp', 1500, .9);
+  return [
+    mk(.09, .14, 1.4, t => S(glide(t, 1150, 640, 70)) * env(t, .0008, .045) + .22 * S(2 * glide(t, 1150, 640, 70)) * env(t, .0005, .018) + .5 * doux(t)),  // doux
+    mk(.16, .24, 1.2, t => { const s = nz(), b = clap(s); return b * ([0, .009, .018].reduce((v, a) => v + (t >= a && t < a + .02 ? E(-(t - a) / .0035) : 0), 0) + (t > .022 ? .9 * E(-(t - .022) / .065) : 0)) + .15 * clapS(s) * E(-t / .03); }),  // clap
+    mk(.12, .16, 1.3, t => S(P * 1150 * t) * E(-t / .035) + .55 * S(P * 2630 * t) * E(-t / .017) + .25 * S(P * 4180 * t) * E(-t / .008) + .5 * bois(t)),  // bois
+    mk(.22, .07, 2.2, t => S(glide(t, 190, 52, 32)) * env(t, .001, .12) + .45 * kick(t)),  // grosse caisse
+    mk(.45, .32, 1.1, t => S(P * 1760 * t + 3.2 * E(-t / .05) * S(P * 1760 * 3.01 * t)) * env(t, .001, .28) + .35 * S(P * 2637 * t) * E(-t / .18) + .2 * S(P * 3520 * t) * E(-t / .08)),  // cristal
+    mk(.08, .12, 1.3, t => S(P * (950 * t - 690 * (1 - E(-90 * t)) / 90)) * env(t, .0012, .028)),  // pop
+    mk(.09, .14, 1.5, t => { let v = 0; for (const f of [205.3, 304.4, 369.6, 522.7, 540, 800]) v += Math.sign(S(P * f * 1.7 * t)); return hat[2](hat[1](hat[0](v / 6))) * env(t, .0005, .038); }),  // charleston
+    mk(.2, .22, 1.6, t => .8 * S(glide(t, 270, 185, 30)) * env(t, .001, .055) + sn(nz()) * env(t, .001, .1) + .4 * sn2(nz()) * E(-t / .05)),  // caisse claire
+    mk(.5, .26, 1.2, t => { let v = 0; for (const [j, p] of pluck.entries()) { const o = p.b[p.i], nx = p.b[(p.i + 1) % p.b.length]; p.b[p.i] = (o + nx) * .5 * .997; p.i = (p.i + 1) % p.b.length; v += o * (j ? .45 : 1); } return v * env(t, .001, .22); }),  // pluck
+    mk(.1, .15, 2, t => S(P * 1720 * t) * E(-t / .011) + .7 * S(P * 510 * t) * E(-t / .028) + .6 * tok(t)),  // tok
+    mk(.7, .35, 1.3, t => (brk(.5 * S(glide(t, 520, 120, 4)) + .35 * S(glide(t, 523, 121, 4) * 1.5)) * 1.4 + .5 * brkN(nz()) * E(-t / .12)) * env(t, .006, .24)),  // combo cassé : un « whoomp » grave qui descend
+  ];
+}
+function rhPlayKit(i, v) { if (!rhCtx || !rhOut) return; rhKit ??= rhKitMake(); const s = rhCtx.createBufferSource(), g = rhCtx.createGain(); s.buffer = rhKit[i]; g.gain.value = v; s.connect(g).connect(rhOut); s.start(); }
+const rhClick = () => { const i = +$('rhClick').value; if (i >= 0) rhPlayKit(i, .45); };
+function rhHook(o) {  // à chaque changement du combo (en partie) : un clic s'il monte, « combo cassé » s'il retombe à 0 depuis 10 ou plus
+  if (Object.getOwnPropertyDescriptor(o, 'combo')?.set) return o;
+  let c = o.combo || 0;
+  Object.defineProperty(o, 'combo', {get: () => c, set: v => { if (o.mode === 'play') { if (v > c) rhClick(); else if (!v && c >= 10) rhPlayKit(10, .5); } c = v; }, enumerable: true, configurable: true});
+  return o;
+}
 function rhAudio() {
   rhCtx ??= new AudioContext();
   if (!rhNoise) { rhNoise = rhCtx.createBuffer(1, rhCtx.sampleRate, rhCtx.sampleRate); const d = rhNoise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
   if (!rhOut) { rhOut = rhCtx.createGain(); rhOut.connect(rhCtx.destination); }
   rhOut.gain.value = +$('rhVol').value / 100 * .6;
+  rhKit ??= rhKitMake();
 }
 function rhSound(e, when, c = rhCtx, out = rhOut) {
   const g = c.createGain(); g.connect(out);
@@ -701,7 +765,7 @@ async function rhPrepare(i, diff) {
   if (tok !== rhTok) return;  // un autre niveau a été choisi entre-temps
   const stars = /^S\d+$/.test(diff) ? +diff.slice(1) : Math.max(1, Math.min(10, Math.round(notes.length / Math.max(30, c.len) * 1.25) + (diff === 'expert' ? 1 : 0)));  // la vitesse des notes dépend du niveau : rapide jusqu'à 2★, très rapide au-delà
   try { rh?.src?.stop(); } catch {}
-  rh = rh || {raf: 0};
+  rh = rhHook(rh || {raf: 0});
   Object.assign(rh, {g: $('rhCanvas').getContext('2d'), mode: 'ready', stars, speed: stars > 2 ? 3.2 : 2.6, tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, dts: [], judge: null, flash: [0, 0, 0, 0], down: [false, false, false, false], sparks: [], done: false});
   games.rhythmLast = {song: i, diff}; rhList();
   gameLoop(rh, 'neodex:rhythm', rhUpdate, rhDraw);
@@ -891,8 +955,9 @@ $('rhCanvas').onpointerdown = e => {
 };
 $('rhFs').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else $('rhCanvas').parentElement.requestFullscreen?.().catch(() => {}); };  // plein écran jusqu'à la fin de la partie
 $('rhOffset').addEventListener('change', () => { rhOffMs = +$('rhOffset').value; });
+$('rhClick').onchange = () => { rhAudio(); rhCtx.resume(); rhClick(); };  // le son choisi, pour l'entendre
 $('rhVol').oninput = () => { if (rhOut) rhOut.gain.value = +$('rhVol').value / 100 * .6; };
-for (const id of ['rhVol', 'rhOffset']) $(id).addEventListener('change', () => { gstore('rhythmPrefs', {})[id] = $(id).value; saveGames(); });
+for (const id of ['rhVol', 'rhClick', 'rhOffset']) $(id).addEventListener('change', () => { gstore('rhythmPrefs', {})[id] = $(id).value; saveGames(); });
 
 document.addEventListener('keydown', e => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -912,7 +977,7 @@ document.addEventListener('keyup', e => {
 });
 
 function rhOpen() {
-  const p = games.rhythmPrefs || {}; for (const id of ['rhVol', 'rhOffset']) if (p[id] != null) $(id).value = p[id];
+  const p = games.rhythmPrefs || {}; for (const id of ['rhVol', 'rhClick', 'rhOffset']) if (p[id] != null) $(id).value = p[id];
   rhOffMs = +$('rhOffset').value;
   if (rh) { rhList(); return gameLoop(rh, 'neodex:rhythm', rhUpdate, rhDraw); }
   const last = games.rhythmLast || {song: 0, diff: 'normal'}; rhSelect(last.song, last.diff).catch(() => rhSelect(0, 'normal'));  // an imported music may be missing on this PC
