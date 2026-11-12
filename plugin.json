@@ -10,6 +10,7 @@
   "neobase": ">=4.1.0",
   "type": "app",
   "category": "Musique",
+  "compatibility": ["windows", "linux"],
   "syncMode": "progression",
   "syncInfo": "Scores et notes par niveau, réglages.",
   "mobile": false,
