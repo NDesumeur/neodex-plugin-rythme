@@ -1,9 +1,9 @@
 {
   "pluginId": "neodex.rythme",
   "repo": "NDesumeur/neodex-plugin-rythme",
-  "version": "1.6.7",
-  "sha256": "be68e8322639e0f00382b9eb600ab44238a0734785bb12dc0bf901f7f0c3bb9d",
-  "approvedAt": "2026-11-08T19:05:41.672Z",
+  "version": "1.6.8",
+  "sha256": "5bb8fa18af285043212ecc6e6495649935adb9c9f99d4acd895338ef59a47af9",
+  "approvedAt": "2026-11-12T12:24:44.883Z",
   "neobase": ">=4.1.0",
-  "signature": "g2FyUPWfADqnQvf8HFHX8/BdPjGE/HeEUL/u6CEZDPzM1kTryZg0ZBcg7+TZYhB2CO7YtbzER+ho6RkucMq1Ag=="
+  "signature": "nSztaGUrbE95FVvOjTHGe54UjgMN2ZKSNbqSVqnWfkoRhMIqtQAVEADPZT15APn/tv8CYCQVwDGEcSKFz80jBA=="
 }
