@@ -14,6 +14,7 @@ const HTML = "<div class=\"appWrap wide\">\n      <div class=\"agHead\"><span cl
 .rhMain{display:flex;gap:24px;align-items:flex-start}
 .rhSide{display:flex;flex-direction:column;gap:16px;flex:1;min-width:280px}
 #rhSongs{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;max-height:560px;overflow-y:auto;padding:4px 8px 4px 4px}
+.rhPager{grid-column:1/-1;display:flex;flex-wrap:nowrap;align-items:center;gap:8px}.rhPager .hint{flex:1;min-width:0;width:auto;margin:0;text-align:center}.rhPager .btn{flex:none;width:auto;margin:0}
 .rhTabs{display:flex;gap:6px}
 .rhImport{gap:12px}
 .rhImport #rhMuList{flex:1;min-width:0;max-width:100%}
@@ -416,8 +417,62 @@ const RH_SONGS = [
     }
     return out;
   })(),
+  // 1000 de plus (n° 201 à 1200) : 20 nouveaux styles, d'autres structures et d'autres arpèges ; ajoutées à la fin pour garder les scores déjà faits
+  ...(() => {
+    const ST = [
+      {n: 'Synthwave', bpm: [100, 118], groove: 'four', wave: ['sawtooth'], modes: ['minor', 'dorian'], dens: [.8, 1], sec: [190, 260]},
+      {n: 'Lo-fi', bpm: [70, 88], groove: 'half', wave: ['triangle', 'sine'], modes: ['dorian', 'minor', 'major'], dens: [.6, .8], sec: [160, 240]},
+      {n: 'Disco', bpm: [112, 124], groove: 'four', wave: ['square', 'sawtooth'], modes: ['major', 'mixolydian'], dens: [1, 1.25], sec: [180, 240]},
+      {n: 'Speedrun', bpm: [160, 180], groove: 'classic', wave: ['square'], modes: ['major', 'lydian', 'minor'], dens: [1.1, 1.35], sec: [150, 190]},
+      {n: 'Mystère', bpm: [60, 78], groove: 'ballad', wave: ['sine', 'triangle'], modes: ['phrygian', 'harmonic'], dens: [.7, .85], sec: [200, 300]},
+      {n: 'Galop', bpm: [124, 142], groove: 'march', wave: ['square'], modes: ['major', 'mixolydian'], dens: [1, 1.2], sec: [150, 200]},
+      {n: 'Électro', bpm: [126, 140], groove: 'break', wave: ['sawtooth'], modes: ['minor', 'phrygian'], dens: [.95, 1.2], sec: [190, 250]},
+      {n: 'Berceuse', bpm: [62, 76], groove: 'ballad', wave: ['sine'], modes: ['major', 'lydian'], dens: [.72, .88], sec: [180, 260]},
+      {n: 'Hardcore', bpm: [174, 184], groove: 'dnb', wave: ['sawtooth', 'square'], modes: ['harmonic', 'minor'], dens: [1.05, 1.3], sec: [150, 200]},
+      {n: 'Fanfare', bpm: [104, 122], groove: 'march', wave: ['square', 'sawtooth'], modes: ['major', 'lydian'], dens: [.9, 1.15], sec: [160, 220]},
+      {n: 'Donjon', bpm: [88, 108], groove: 'half', wave: ['square'], modes: ['harmonic', 'phrygian', 'minor'], dens: [.8, 1], sec: [200, 280]},
+      {n: 'Plage', bpm: [92, 108], groove: 'funk', wave: ['triangle', 'square'], modes: ['major', 'mixolydian'], dens: [.9, 1.15], sec: [170, 230]},
+      {n: 'Poursuite', bpm: [150, 170], groove: 'break', wave: ['square', 'sawtooth'], modes: ['minor', 'harmonic', 'major'], dens: [1.05, 1.3], sec: [160, 210]},
+      {n: 'Flocons', bpm: [72, 92], groove: 'ballad', wave: ['triangle', 'sine'], modes: ['lydian', 'dorian'], dens: [.65, .85], sec: [200, 280]},
+      {n: 'Rétro', bpm: [120, 140], groove: 'classic', wave: ['square', 'triangle'], modes: ['major', 'dorian', 'mixolydian'], dens: [1, 1.25], sec: [150, 210]},
+      {n: 'Nuit blanche', bpm: [118, 128], groove: 'four', wave: ['sawtooth', 'square'], modes: ['minor', 'dorian', 'phrygian'], dens: [.9, 1.15], sec: [210, 300]},
+      {n: 'Héroïque', bpm: [128, 150], groove: 'half', wave: ['sawtooth', 'square'], modes: ['major', 'mixolydian', 'lydian'], dens: [.9, 1.15], sec: [220, 320]},
+      {n: 'Ouragan', bpm: [164, 178], groove: 'dnb', wave: ['sawtooth'], modes: ['harmonic', 'phrygian'], dens: [1, 1.25], sec: [170, 220]},
+      {n: 'Foire', bpm: [108, 122], groove: 'funk', wave: ['square'], modes: ['mixolydian', 'major', 'dorian'], dens: [1.05, 1.3], sec: [160, 220]},
+      {n: 'Odyssée', bpm: [96, 120], groove: 'classic', wave: ['triangle', 'sawtooth'], modes: ['lydian', 'major', 'minor'], dens: [.8, 1.05], sec: [240, 320]},
+    ];
+    const N = ['Ballet', 'Carnaval', 'Ronde', 'Fête', 'Marché', 'Train', 'Bal', 'Prière', 'Galopade', 'Envol', 'Retour', 'Départ', 'Festin', 'Duel', 'Complainte', 'Ode', 'Hymne',
+      'Lettre', 'Carte', 'Clé', 'Porte', 'Cloche', 'Boussole', 'Carrousel', 'Fontaine', 'Labyrinthe', 'Bastion', 'Citadelle', 'Grenier', 'Verger', 'Moulin', 'Quai', 'Gare',
+      'Navire', 'Caravane', 'Flûte', 'Harpe', 'Mosaïque', 'Parade', 'Tournoi', 'Rodéo', 'Sortilège', 'Grimoire', 'Talisman', 'Vigie', 'Halte', 'Escale', 'Royaume'];
+    const C = ['des lucioles', 'du port', 'des pirates', 'du château', 'des robots', 'des neiges', 'du soleil', 'des abysses', 'de la jungle', 'des nuages', 'du métro',
+      'des automates', 'de l\'arène', 'du marais', 'des sorciers', 'des forges', 'de la cité', 'des tempêtes', 'du printemps', 'de l\'automne', 'de l\'été', 'des moissons',
+      'du bazar', 'des sirènes', 'de la grotte', 'des coquillages', 'du glacier', 'des mines', 'des dunes', 'des chevaliers', 'des fantômes', 'des engrenages',
+      'des cerfs-volants', 'de la rivière', 'des pixels', 'du néant', 'des miroirs', 'du cirque', 'des bulles', 'du dragon', 'des planètes', 'des chats', 'du vieux phare'];
+    const progs = [[0, 5, 3, 4, 0, 5, 1, 4], [0, 3, 4, 0, 5, 3, 1, 4], [5, 3, 0, 4, 5, 3, 1, 4], [0, 6, 5, 4, 0, 6, 3, 4], [0, 2, 5, 3, 0, 2, 6, 4], [0, 5, 3, 4], [0, 4, 5, 3],
+      [5, 3, 0, 4], [0, 3, 0, 4], [0, 5, 2, 6], [0, 4, 1, 5, 2, 6, 3, 4], [0, 0, 3, 4], [5, 4, 3, 4], [0, 6, 3, 5, 0, 6, 4, 4], [3, 4, 5, 5], [0, 1, 3, 4]];
+    const arps = [[0, 2, 4, 7], [0, 4, 7, 4], [0, 7, 4, 2], [0, 2, 7, 4], [4, 2, 0, 2], [0, 4, 2, 7], [0, 3, 5, 7], [7, 4, 2, 0], [0, 5, 4, 2], [2, 4, 7, 4]];
+    const cycles = [  // plusieurs façons d'enchaîner les parties
+      [['A', 8], ['B', 8], ['A', 8], ['B', 8], ['pont', 8], ['A', 8], ['B', 8], ['B', 8]],
+      [['A', 8], ['A', 8], ['B', 8], ['pont', 4], ['B', 8], ['A', 8], ['B', 8], ['pont', 4]],
+      [['A', 4], ['B', 8], ['A', 4], ['B', 8], ['pont', 8], ['B', 8]],
+      [['B', 8], ['A', 8], ['pont', 4], ['A', 8], ['B', 8], ['B', 8]],
+    ];
+    const r4 = seeded(31415), used = new Set(), out = [], pick = a => a[Math.floor(r4() * a.length)], between = ([a, b]) => a + r4() * (b - a);
+    const form = (bars, cyc) => { const f = [['intro', pick([2, 4])]]; let n = f[0][1] + 4, i = 0; while (n + cyc[i % cyc.length][1] <= bars) { f.push(cyc[i % cyc.length]); n += cyc[i % cyc.length][1]; i++; } f.push(['outro', 4]); return {form: f, bars: n}; };
+    for (let i = 0; i < 999; i++) {
+      const S = ST[i % 20], bpm = Math.round(between(S.bpm)), want = Math.round(between(S.sec) * bpm / 240 / 4) * 4, {form: f, bars} = form(want, pick(cycles));
+      let name; do name = pick(N) + ' ' + pick(C); while (used.has(name)); used.add(name);
+      out.push({name, style: S.n, bpm, seed: 20000 + i * 37, mode: pick(S.modes), prog: pick(progs), root: 40 + Math.floor(r4() * 14), groove: S.groove, wave: pick(S.wave),
+        form: f, long: true, arp: pick(arps), dens: Math.round(between(S.dens) * 100) / 100, mod: i % 4 === 2 ? Math.round(bars * .6 / 4) * 4 : 0, len: bars * 16 * 60 / bpm / 4});
+    }
+    // la n° 1200, « Lilas » : lente, en mineur, des accords qui descendent, toujours en dernier dans la liste
+    out.push({name: 'Lilas', style: 'Mélancolie', bpm: 66, seed: 99991, mode: 'minor', prog: [0, 5, 2, 6, 0, 5, 3, 4], root: 45, groove: 'ballad', wave: 'triangle',
+      form: [['intro', 4], ['A', 8], ['B', 8], ['A', 8], ['pont', 8], ['B', 8], ['A', 8], ['outro', 4]], long: true, arp: [4, 2, 0, 2], dens: .64, mod: 0, len: 56 * 16 * 60 / 66 / 4, last: true});
+    return out;
+  })(),
 ];
-console.assert(RH_SONGS.length === 200 && new Set(RH_SONGS.map(s => s.name)).size === 200 && new Set(RH_SONGS.map(s => s.seed)).size === 200 && RH_SONGS.slice(100).every(s => s.len > 140 && s.len < 340), 'rythme : 200 chansons différentes, les 100 dernières de 2 min 30 à 5 min');
+console.assert(RH_SONGS.length === 1200 && new Set(RH_SONGS.map(s => s.name)).size === 1200 && new Set(RH_SONGS.map(s => s.seed)).size === 1200 && RH_SONGS.slice(100, 200).every(s => s.len > 140 && s.len < 340), 'rythme : 1200 chansons différentes, les 100 dernières de 2 min 30 à 5 min');
+console.assert(RH_SONGS.slice(200).every(s => s.len > 115 && s.len < 340), 'rythme : les 1000 dernières de 2 à 5 min 30');
 // la structure d'une chanson : [partie, nombre de mesures] (0 = celle des 40 premières)
 const RH_FORMS = [
   [['intro', 4], ['A', 8], ['B', 8], ['A', 8], ['pont', 4], ['B', 8], ['A', 8], ['outro', 4]],
@@ -906,6 +961,17 @@ function rhDiffRow(key, sel, play, imp) {
   }
   return row;
 }
+let rhPage = null;
+function rhPager(order) {  // 1200 chansons : 50 par page (sinon la liste est trop lourde), on ouvre sur la page de la chanson choisie
+  const n = Math.ceil(order.length / 50);
+  rhPage = Math.min(n - 1, Math.max(0, rhPage ?? Math.floor(Math.max(0, order.indexOf(rh?.song)) / 50)));
+  return () => {
+    const r = el('div', 'rhPager'), a = el('button', 'btn', '◀'), b = el('button', 'btn', '▶');
+    a.disabled = rhPage === 0; b.disabled = rhPage === n - 1;
+    a.onclick = () => { rhPage--; rhList(); $('rhSongs').scrollTop = 0; }; b.onclick = () => { rhPage++; rhList(); $('rhSongs').scrollTop = 0; };
+    r.append(a, el('span', 'hint', (rhPage * 50 + 1) + '–' + Math.min(order.length, rhPage * 50 + 50) + ' / ' + order.length), b); return r;
+  };
+}
 function rhList() {
   $('rhTabSongs').classList.toggle('on', rhTab === 'songs'); $('rhTabMine').classList.toggle('on', rhTab === 'mine');
   $('rhTabMine').textContent = 'MES MUSIQUES · ' + rhImports().length;
@@ -914,12 +980,13 @@ function rhList() {
   if (rhTab === 'songs') {
     const res = games?.rhythm || {}, done = RH_SONGS.filter((_, i) => Object.keys(RH_DIFFS).some(d => res['rh' + i + d])).length;
     $('rhTabSongs').textContent = 'CHANSONS · ' + done + ' / ' + RH_SONGS.length;
-    const order = RH_SONGS.map((s, i) => i).sort((a, b) => RH_SONGS[a].bpm - RH_SONGS[b].bpm);  // from the calmest to the fastest
-    return $('rhSongs').replaceChildren(...order.map((i, rank) => {
+    const order = RH_SONGS.map((s, i) => i).sort((a, b) => !!RH_SONGS[a].last - !!RH_SONGS[b].last || RH_SONGS[a].bpm - RH_SONGS[b].bpm);  // from the calmest to the fastest
+    const bar = rhPager(order), p0 = rhPage * 50;
+    return $('rhSongs').replaceChildren(bar(), ...order.slice(p0, p0 + 50).map((i, k) => { const rank = p0 + k;
       const s = RH_SONGS[i], c = el('div', 'sysCard px rhSong' + (rh?.song === i ? ' on' : '')), mins = (RH_LEN[i] ??= s.len ?? rhCompose(s).len);
       c.append(el('b', '', (rank + 1) + '. ' + s.name), el('span', 'hint', (s.style ? s.style + ' · ' : '') + s.bpm + ' BPM · ' + clock(mins) + ' · ' + '★'.repeat(Math.max(1, 1 + Math.min(4, Math.floor((s.bpm - 88) / 22))))), rhDiffRow('rh' + i, rh?.song === i, d => rhSelect(i, d)));
       return c;
-    }));
+    }), bar());
   }
   const list = rhImports();
   $('rhSongs').replaceChildren(...(list.length ? list.map(imp => {

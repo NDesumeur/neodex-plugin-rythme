@@ -1,6 +1,6 @@
 # Rythme
 
-Un jeu de rythme sur 4 voies : les notes descendent vers une ligne, appuie sur la bonne touche au moment où elles la touchent. 200 morceaux composés et joués par le jeu lui-même, chacun en 4 difficultés, ou des niveaux créés à partir de ta propre musique.
+Un jeu de rythme sur 4 voies : les notes descendent vers une ligne, appuie sur la bonne touche au moment où elles la touchent. 1200 morceaux composés et joués par le jeu lui-même, chacun en 4 difficultés, ou des niveaux créés à partir de ta propre musique.
 
 *English version: [README.en.md](README.en.md)*
 
@@ -18,7 +18,7 @@ Les points d'une note augmentent de 1 % par note de combo, jusqu'au double à 10
 
 ## Chansons
 
-L'onglet **Chansons** propose 200 morceaux composés par le jeu : chacun a son tempo, sa gamme, ses accords, sa batterie et son son de mélodie, et ses notes sont toujours les mêmes d'une partie à l'autre. Chaque morceau existe en **Facile**, **Normal**, **Difficile** et **Expert**.
+L'onglet **Chansons** propose 1200 morceaux composés par le jeu : chacun a son tempo, sa gamme, ses accords, sa batterie et son son de mélodie, et ses notes sont toujours les mêmes d'une partie à l'autre. Chaque morceau existe en **Facile**, **Normal**, **Difficile** et **Expert**.
 
 Ces morceaux servent aussi aux jeux NeoTha, Prisme et Pulsar.
 

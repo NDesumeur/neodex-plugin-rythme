@@ -1,6 +1,6 @@
 # Rythme (Rhythm)
 
-A 4-lane rhythm game: notes fall towards a line, and you press the right key the moment they touch it. 200 tracks composed and played by the game itself, each in 4 difficulties, or levels created from your own music.
+A 4-lane rhythm game: notes fall towards a line, and you press the right key the moment they touch it. 1200 tracks composed and played by the game itself, each in 4 difficulties, or levels created from your own music.
 
 *Version française : [README.md](README.md)*
 
@@ -18,7 +18,7 @@ A note's points rise by 1 % per note of combo, up to double at 100 notes in a ro
 
 ## Songs
 
-The **Songs** tab offers 200 tracks composed by the game: each has its own tempo, scale, chords, drums and lead sound, and its notes are always the same from one game to the next. Each track comes in **Easy**, **Normal**, **Hard** and **Expert**.
+The **Songs** tab offers 1200 tracks composed by the game: each has its own tempo, scale, chords, drums and lead sound, and its notes are always the same from one game to the next. Each track comes in **Easy**, **Normal**, **Hard** and **Expert**.
 
 These tracks are also used by the NeoTha, Prisme and Pulsar games.
 
