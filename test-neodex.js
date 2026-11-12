@@ -1,5 +1,12 @@
 // lancé par le test « local » de NeoDex : plein écran, touches tapées alors que NeoDex a le clavier, puis fluidité en jeu
 module.exports = async ({ pj, js, sleep }) => {
+  { // les touches réglables : la 1re case prend Q, puis reprend sa touche d'avant
+    const r = await pj(`(async () => { const b = document.querySelector('.rhKeys button'); if (!b) return 'pas de réglage des touches'; const old = b.textContent;
+      const press = k => dispatchEvent(new KeyboardEvent('keydown', {key: k, bubbles: true}));
+      b.click(); press('q'); await new Promise(r => setTimeout(r, 50)); if (b.textContent !== 'Q') return 'touche non prise : ' + b.textContent;
+      b.click(); press(old.toLowerCase()); await new Promise(r => setTimeout(r, 50)); return b.textContent === old ? '' : 'touche non rendue'; })()`);
+    if (r) throw new Error(r);
+  }
   await pj(`document.querySelector('#rhSongs .rhSong .btn')?.click(), 0`); await sleep(9000);  // un morceau intégré (son rendu prend quelques secondes)
   await pj(`document.getElementById('rhFs').click(), 0`); await sleep(1200);
   const fs = await pj(`!!document.fullscreenElement`);

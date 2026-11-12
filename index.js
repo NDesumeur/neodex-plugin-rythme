@@ -1,7 +1,7 @@
 // Rythme : ton appli d'origine (HTML et code inchangés), livrée en plugin.
 // Ses données sont dans le dossier du plugin, que NeoDex sauvegarde (synchro cloud et sauvegardes) ; à la première ouverture elle reprend ce que tu avais dans NeoDex.
 // Elle tourne dans le bac à sable de NeoDex, avec ses outils d'interface (ctx.host) et seulement les autorisations de son plugin.json.
-const HTML = "<div class=\"appWrap wide\">\n      <div class=\"agHead\"><span class=\"label\">Rythme</span><span class=\"hint\">Touches D F J K (ou les flèches) · espace : jouer · P : pause</span></div>\n      <div class=\"rhMain\"><div class=\"gameBox tall\"><canvas id=\"rhCanvas\" width=\"240\" height=\"320\"></canvas><button class=\"btn px rhFs\" id=\"rhFs\">PLEIN ÉCRAN</button></div>\n        <div class=\"rhSide\"><div class=\"rhTabs\"><button class=\"tab px on\" id=\"rhTabSongs\">CHANSONS</button><button class=\"tab px\" id=\"rhTabMine\">MES MUSIQUES</button></div><div class=\"sysCard px rhImport\" id=\"rhImport\" style=\"display:none\"><div class=\"row\"><button class=\"btn main px\" id=\"rhFileBtn\">IMPORTER UN FICHIER AUDIO</button><input type=\"file\" id=\"rhFile\" accept=\"audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac,.webm\" hidden></div><div class=\"row\"><select class=\"f gSel\" id=\"rhMuList\"></select><button class=\"btn px\" id=\"rhMuBtn\">CRÉER LE NIVEAU</button></div><div class=\"row\"><label>Difficulté du niveau <select class=\"f gSel\" id=\"rhStars\"><option value=\"1\">★</option><option value=\"2\">★★</option><option value=\"3\" selected>★★★</option><option value=\"4\">★★★★</option><option value=\"5\">★★★★★</option><option value=\"6\">★★★★★★</option><option value=\"7\">★★★★★★★</option><option value=\"8\">★★★★★★★★</option><option value=\"9\">★★★★★★★★★</option><option value=\"10\">★★★★★★★★★★</option></select></label></div><span class=\"hint\" id=\"rhImpMsg\">Depuis un fichier ou une musique de NeoMusic : 4 niveaux sont créés à partir de son tempo et de ses temps forts.</span></div><div id=\"rhSongs\"></div><div class=\"sysCard px rhOpts\"><label>Volume <input type=\"range\" id=\"rhVol\" min=\"0\" max=\"100\" value=\"70\"></label><label>Son des clics <select class=\"f gSel\" id=\"rhClick\"><option value=\"0\" selected>Doux</option><option value=\"1\">Clap</option><option value=\"2\">Bois</option><option value=\"3\">Grosse caisse</option><option value=\"4\">Cristal</option><option value=\"5\">Pop</option><option value=\"6\">Charleston</option><option value=\"7\">Caisse claire</option><option value=\"8\">Pluck</option><option value=\"9\">Tok</option><option value=\"-1\">Aucun</option></select></label><label>Décalage audio <input type=\"number\" class=\"f\" id=\"rhOffset\" min=\"-300\" max=\"300\" step=\"5\" value=\"0\" style=\"width:80px\" title=\"Réglé tout seul après chaque partie\"> ms (auto)</label></div></div></div>\n      <div class=\"hint\">Appuie quand la note touche la ligne, maintiens les notes longues. Le décalage audio se règle tout seul après chaque partie (tu peux aussi le changer à la main).</div>\n    </div>";
+const HTML = "<div class=\"appWrap wide\">\n      <div class=\"agHead\"><span class=\"label\">Rythme</span><span class=\"hint\">Touches réglables dans les options (et les flèches) · espace : jouer · P : pause</span></div>\n      <div class=\"rhMain\"><div class=\"gameBox tall\"><canvas id=\"rhCanvas\" width=\"240\" height=\"320\"></canvas><button class=\"btn px rhFs\" id=\"rhFs\">PLEIN ÉCRAN</button></div>\n        <div class=\"rhSide\"><div class=\"rhTabs\"><button class=\"tab px on\" id=\"rhTabSongs\">CHANSONS</button><button class=\"tab px\" id=\"rhTabMine\">MES MUSIQUES</button></div><div class=\"sysCard px rhImport\" id=\"rhImport\" style=\"display:none\"><div class=\"row\"><button class=\"btn main px\" id=\"rhFileBtn\">IMPORTER UN FICHIER AUDIO</button><input type=\"file\" id=\"rhFile\" accept=\"audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac,.webm\" hidden></div><div class=\"row\"><select class=\"f gSel\" id=\"rhMuList\"></select><button class=\"btn px\" id=\"rhMuBtn\">CRÉER LE NIVEAU</button></div><div class=\"row\"><label>Difficulté du niveau <select class=\"f gSel\" id=\"rhStars\"><option value=\"1\">★</option><option value=\"2\">★★</option><option value=\"3\" selected>★★★</option><option value=\"4\">★★★★</option><option value=\"5\">★★★★★</option><option value=\"6\">★★★★★★</option><option value=\"7\">★★★★★★★</option><option value=\"8\">★★★★★★★★</option><option value=\"9\">★★★★★★★★★</option><option value=\"10\">★★★★★★★★★★</option></select></label></div><span class=\"hint\" id=\"rhImpMsg\">Depuis un fichier ou une musique de NeoMusic : 4 niveaux sont créés à partir de son tempo et de ses temps forts.</span></div><div id=\"rhSongs\"></div><div class=\"sysCard px rhOpts\"><label>Volume <input type=\"range\" id=\"rhVol\" min=\"0\" max=\"100\" value=\"70\"></label><label>Son des clics <select class=\"f gSel\" id=\"rhClick\"><option value=\"0\" selected>Doux</option><option value=\"1\">Clap</option><option value=\"2\">Bois</option><option value=\"3\">Grosse caisse</option><option value=\"4\">Cristal</option><option value=\"5\">Pop</option><option value=\"6\">Charleston</option><option value=\"7\">Caisse claire</option><option value=\"8\">Pluck</option><option value=\"9\">Tok</option><option value=\"-1\">Aucun</option></select></label><label>Décalage audio <input type=\"number\" class=\"f\" id=\"rhOffset\" min=\"-300\" max=\"300\" step=\"5\" value=\"0\" style=\"width:80px\" title=\"Réglé tout seul après chaque partie\"> ms (auto)</label></div></div></div>\n      <div class=\"hint\">Appuie quand la note touche la ligne, maintiens les notes longues. Le décalage audio se règle tout seul après chaque partie (tu peux aussi le changer à la main).</div>\n    </div>";
 /*CSS-MOVED*/ const CSS = `.gameBox{position:relative}
 .rhFs{position:absolute;top:14px;right:14px;opacity:.85}
 .gameBox:fullscreen .rhFs{display:none}
@@ -1043,8 +1043,34 @@ document.addEventListener('keyup', e => {
   if (rh) { const lane = RH.KEYS.findIndex(ks => ks.includes(k)); if (lane >= 0) rhKey(lane, false); }
 });
 
+// les touches, réglables dans les options : clic sur une case, puis appui sur la nouvelle touche (Échap annule) ; une touche déjà prise échange sa place
+const KEY_NAME = k => k.length === 1 ? k.toUpperCase() : ({ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓'})[k] || k;
+const KEYS_BAN = [' ', 'p', 'Escape', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];  // jouer, pause, et les flèches qui restent toujours actives
+function keysSet(ks) { ks.forEach((k, i) => { RH.KEYS[i][0] = k; }); document.querySelectorAll('.rhKeys button').forEach((b, i) => { b.textContent = KEY_NAME(RH.KEYS.map(k => k[0])[i]); }); }
+function keysUi() {  // construit au premier rhOpen : les réglages du jeu sont alors définis
+  if (document.querySelector('.rhKeys')) return;
+  const box = document.createElement('label'); box.className = 'rhKeys'; box.append('Touches ');
+  RH.KEYS.map(k => k[0]).forEach((_, i) => {
+    const b = document.createElement('button'); b.className = 'btn px'; b.style.cssText = 'width:auto;min-width:30px;margin:0 2px;padding:2px 6px'; b.textContent = KEY_NAME(RH.KEYS.map(k => k[0])[i]); b.dataset.key = i;
+    b.onclick = e => {
+      e.preventDefault(); b.textContent = '?';
+      const on = ev => {
+        ev.preventDefault(); ev.stopPropagation(); removeEventListener('keydown', on, true);
+        const k = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key, ks = [...RH.KEYS.map(k => k[0])];
+        if (ev.key !== 'Escape' && !KEYS_BAN.includes(k) && k.length === 1) { const j = ks.indexOf(k); if (j >= 0) ks[j] = ks[i]; ks[i] = k; gstore('rhythmPrefs', {}).keys = ks; saveGames(); }
+        keysSet(ks); b.blur();
+      };
+      addEventListener('keydown', on, true);
+    };
+    box.append(b);
+  });
+  $('rhOffset').closest('.rhOpts').append(box);
+}
+
 function rhOpen() {
   const p = games.rhythmPrefs || {}; for (const id of ['rhVol', 'rhClick', 'rhOffset']) if (p[id] != null) $(id).value = p[id];
+  keysUi();
+  if (Array.isArray(p.keys) && p.keys.length === RH.KEYS.length) keysSet(p.keys);
   rhOffMs = +$('rhOffset').value;
   if (rh) { rhList(); return gameLoop(rh, 'neodex:rhythm', rhUpdate, rhDraw); }
   const last = games.rhythmLast || {song: 0, diff: 'normal'}; rhSelect(last.song, last.diff).catch(() => rhSelect(0, 'normal'));  // an imported music may be missing on this PC
