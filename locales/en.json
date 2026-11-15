@@ -111,7 +111,6 @@
  "JOUER ·": "PLAY ·",
  "Jade": "Jade",
  "Jardin": "Garden",
- "Jeu de rythme sur 4 voies : appuie sur D, F, J, K (ou les flèches) quand les notes touchent la ligne, et maintiens les notes longues. 1200 morceaux composés et joués par le jeu, chacun en Facile, Normal, Difficile et Expert, ou des niveaux créés depuis un fichier audio ou ta bibliothèque NeoMusic. Parfait, Bien ou OK, combo, note de S à D et décalage réglé tout seul.": "A 4-lane rhythm game: press D, F, J, K (or the arrows) when notes touch the line, and hold long notes. 1200 tracks composed and played by the game, each in Easy, Normal, Hard and Expert, or levels created from an audio file or your NeoMusic library. Perfect, Good or OK, combo, grades from S to D and a self-adjusting offset.",
  "Jungle": "Jungle",
  "KAAKHDDDDDDDKSSK": "KAAKHDDDDDDDKSSK",
  "KAAKHHHHHHHHKSSK": "KAAKHHHHHHHHKSSK",
@@ -357,5 +356,7 @@
  "Touches réglables dans les options (et les flèches) · espace : jouer · P : pause": "Keys can be changed in the options (arrows too) · space: play · P: pause",
  "Tab": "Tab",
  "Enter": "Enter",
- "Touches": "Keys"
+ "Touches": "Keys",
+ "Jeu de rythme sur 4 voies : appuie sur D, F, J, K (ou les flèches) quand les notes touchent la ligne, et maintiens les notes longues. 1200 morceaux composés et joués par le jeu, chacun en Facile, Normal, Difficile et Expert, ou des niveaux créés depuis un fichier audio ou ta bibliothèque NeoMusic. Parfait, Bien ou OK, combo, note de S à D et décalage réglé tout seul. L'écran de fin montre la courbe de précision le long du morceau.": "A 4-lane rhythm game: press D, F, J, K (or the arrows) when notes touch the line, and hold long notes. 1200 tracks composed and played by the game, each in Easy, Normal, Hard and Expert, or levels created from an audio file or your NeoMusic library. Perfect, Good or OK, combo, grades from S to D and a self-adjusting offset. The end screen shows the accuracy curve across the song.",
+ "PRÉCISION LE LONG DU MORCEAU": "ACCURACY ACROSS THE SONG"
 }

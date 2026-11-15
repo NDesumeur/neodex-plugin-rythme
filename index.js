@@ -823,7 +823,8 @@ async function rhPrepare(i, diff) {
   const stars = /^S\d+$/.test(diff) ? +diff.slice(1) : Math.max(1, Math.min(10, Math.round(notes.length / Math.max(30, c.len) * 1.25) + (diff === 'expert' ? 1 : 0)));  // la vitesse des notes dépend du niveau : rapide jusqu'à 2★, très rapide au-delà
   try { rh?.src?.stop(); } catch {}
   rh = rhHook(rh || {raf: 0});
-  Object.assign(rh, {g: $('rhCanvas').getContext('2d'), mode: 'ready', stars, speed: stars > 2 ? 3.2 : 2.6, tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, dts: [], judge: null, flash: [0, 0, 0, 0], down: [false, false, false, false], sparks: [], done: false});
+  Object.assign(rh, {g: $('rhCanvas').getContext('2d'), mode: 'ready', stars, speed: stars > 2 ? 3.2 : 2.6, tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, dts: [], hist: [], judge: null, flash: [0, 0, 0, 0], down: [false, false, false, false], sparks: [], done: false});
+  $('rhCanvas').__rh = () => rh;  // pour le test « local »
   games.rhythmLast = {song: i, diff}; rhList();
   gameLoop(rh, 'neodex:rhythm', rhUpdate, rhDraw);
 }
@@ -855,13 +856,13 @@ function rhJudge(n, dt) {
   const w = RH.WIN.find(w => Math.abs(dt) <= w[0]);
   n.judged = true;
   if (!w) return rhMiss(n);
-  rh.dts.push(dt); rh.combo++; rh.maxCombo = Math.max(rh.maxCombo, rh.combo); rh.counts[w[1]]++;
+  rh.hist.push([n.t, {PARFAIT: 3, BIEN: 2, OK: 1}[w[1]] || 1]); rh.dts.push(dt); rh.combo++; rh.maxCombo = Math.max(rh.maxCombo, rh.combo); rh.counts[w[1]]++;
   rh.score += Math.round(w[2] * (1 + Math.min(rh.combo, 100) / 100));
   rh.judge = {text: w[1], color: w[3], t: 30, dt};
   for (let i = 0; i < 8; i++) rh.sparks.push({x: RH.X0 + n.lane * RH.LW + RH.LW / 2, y: RH.HIT, vx: (Math.random() - .5) * 3, vy: -Math.random() * 3, life: 18, color: RH.COLORS[n.lane]});
   if (n.len) n.held = true;
 }
-function rhMiss(n) { n.judged = true; n.missed = true; rh.combo = 0; rh.counts['RATÉ']++; rh.judge = {text: 'RATÉ', color: '#ff4f6d', t: 30}; }
+function rhMiss(n) { rh.hist.push([n.t, 0]); n.judged = true; n.missed = true; rh.combo = 0; rh.counts['RATÉ']++; rh.judge = {text: 'RATÉ', color: '#ff4f6d', t: 30}; }
 function rhKey(lane, down) {
   if (!rh || rh.mode !== 'play') return;
   rh.down[lane] = down;
@@ -909,6 +910,27 @@ function rhAutoOffset(dts) {
   return d;
 }
 function rhGem(g, x, y, c, w = 32) { px(g, '#05010b', x - 1, y - 4, w + 2, 9); px(g, c, x, y - 3, w, 7); px(g, 'rgba(255,255,255,.6)', x + 2, y - 3, w - 4, 2); px(g, 'rgba(5,1,11,.3)', x, y + 2, w, 2); }
+// la courbe de précision de l'écran de fin : la justesse le long du morceau (24 tranches ; 100 % = tout en PARFAIT), les notes ratées en rouge dessous
+function rhCurveData(hist, len, N = 24) {
+  const b = Array.from({length: N}, () => [0, 0]);
+  for (const [t, s] of hist) { const k = Math.min(N - 1, Math.max(0, Math.floor(t / len * N))); b[k][0] += s; b[k][1]++; }
+  return b.map(([s, n]) => n ? s / (n * 3) : null);
+}
+console.assert(rhCurveData([[0, 3], [1, 3], [9, 0], [9.5, 3]], 10, 2).join() === '1,0.5', 'rhCurveData');
+function rhCurve(g, W, y) {
+  const N = 24, x0 = 20, w = W - 60, h = 30, len = rh.c.len || 1, acc = rhCurveData(rh.hist || [], len, N), Y = a => Math.round(y + 6 + (1 - Math.max(0, Math.min(1, (a - .5) / .5))) * h);
+  g.fillStyle = 'rgba(7,2,26,.9)'; g.fillRect(x0 - 8, y - 9, w + 36, h + 22); px(g, '#ff5ad9', x0 - 8, y - 9, w + 36, 1);
+  pxFont(g, 'PRÉCISION LE LONG DU MORCEAU', x0, y, '#8f7bb8', 5);
+  for (const [f, t] of [[1, '100'], [.75, '75']]) { for (let x = x0; x < x0 + w; x += 3) px(g, '#2a1d52', x, Y(f), 1, 1); pxFont(g, t, x0 + w + 4, Y(f) + 3, '#5a4a8a', 5); }
+  let prev = null;
+  acc.forEach((a, k) => {
+    if (a == null) { prev = null; return; }
+    const xa = x0 + Math.round(k * w / N), xb = x0 + Math.round((k + 1) * w / N), yy = Y(a), col = a >= .9 ? '#8ee8a0' : a >= .7 ? '#ffd07a' : '#ff4f6d';
+    if (prev != null) px(g, col, xa, Math.min(prev, yy), 1, Math.abs(prev - yy) + 2);
+    px(g, col, xa, yy, xb - xa, 2); prev = yy;
+  });
+  for (const [t, s] of rh.hist || []) if (!s) px(g, '#ff4f6d', x0 + Math.round(Math.min(1, t / len) * (w - 1)), y + h + 8, 1, 3);
+}
 function rhDraw() {
   const g = rh.g, {W, H, HIT, LW, X0} = RH, now = rhCtx && rh.mode !== 'ready' && rh.mode !== 'load' ? rhNow() : -2, speed = rh.speed * 90;
   const beat = 60 / rh.info.bpm, pulse = now > 0 ? Math.max(0, 1 - (now % beat) / beat * 2) : 0;
@@ -951,7 +973,8 @@ function rhDraw() {
   if (rh.mode === 'ready') gameText(g, W, [[title.toUpperCase(), '#ff5ad9', 8], [(RH_DIFFS[rh.diff] || 'Perso') + ' · ' + rh.stars + '★ · ' + rh.notes.length + ' notes', '#d9c6ff'], ['Espace ou clic : jouer', '#ffd07a'], ['Touches D F J K', '#8f7bb8']], 150);
   if (rh.mode === 'load') gameText(g, W, [['CHARGEMENT…', '#ffd07a', 10], ['La musique se prépare', '#d9c6ff']], 160);
   if (rh.mode === 'pause') gameText(g, W, [['PAUSE', '#ffffff', 12], ['Espace : reprendre', '#d9c6ff']], 160);
-  if (rh.mode === 'over') gameText(g, W, [['NOTE ' + rh.grade, rh.grade === 'S' ? '#ffd07a' : '#ff5ad9', 14], [rh.score + ' points', '#ffffff'], ['Précision ' + (rh.acc * 100).toFixed(1) + ' %', '#d9c6ff'], ['Combo max ' + rh.maxCombo, '#d9c6ff'], ['P ' + rh.counts.PARFAIT + ' · B ' + rh.counts.BIEN + ' · OK ' + rh.counts.OK + ' · X ' + rh.counts['RATÉ'], '#8f7bb8'], [rh.record ? 'NOUVEAU RECORD !' : 'Espace : rejouer', '#ffd07a'], ...(rh.adj ? [['Décalage ajusté : ' + (rh.adj > 0 ? '+' : '') + rh.adj + ' ms', '#7ee07a']] : [])], 110);
+  if (rh.mode === 'over') gameText(g, W, [['NOTE ' + rh.grade, rh.grade === 'S' ? '#ffd07a' : '#ff5ad9', 14], [rh.score + ' points', '#ffffff'], ['Précision ' + (rh.acc * 100).toFixed(1) + ' %', '#d9c6ff'], ['Combo max ' + rh.maxCombo, '#d9c6ff'], ['P ' + rh.counts.PARFAIT + ' · B ' + rh.counts.BIEN + ' · OK ' + rh.counts.OK + ' · X ' + rh.counts['RATÉ'], '#8f7bb8'], [rh.record ? 'NOUVEAU RECORD !' : 'Espace : rejouer', '#ffd07a'], ...(rh.adj ? [['Décalage ajusté : ' + (rh.adj > 0 ? '+' : '') + rh.adj + ' ms', '#7ee07a']] : [])], 96);
+  if (rh.mode === 'over') rhCurve(g, W, 96 + (rh.adj ? 7 : 6) * 14 + 18);
 }
 function rhDiffRow(key, sel, play, imp) {
   const res = games?.rhythm || {}, row = el('div', 'row');

@@ -41,3 +41,7 @@ Your scores and grades per level and your settings are stored by NeoDex, backed 
 In NeoDex: **NeoStore → Discover → Rythme → Install**.
 
 Building a plugin: see the [NeoDex SDK](https://github.com/NDesumeur/neodex-sdk).
+
+## Version 1.7.0
+
+- End screen: the accuracy curve across the song (green, yellow or red depending on timing), with missed notes marked in red below it.

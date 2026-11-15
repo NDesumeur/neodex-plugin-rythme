@@ -41,3 +41,7 @@ Tes scores et notes par niveau et tes réglages sont enregistrés par NeoDex, sa
 Dans NeoDex : **NeoStore → À découvrir → Rythme → Installer**.
 
 Développer un plugin : voir le [SDK NeoDex](https://github.com/NDesumeur/neodex-sdk).
+
+## Version 1.7.0
+
+- Écran de fin : la courbe de précision le long du morceau (verte, jaune ou rouge selon la justesse), avec les notes ratées marquées en rouge dessous.
