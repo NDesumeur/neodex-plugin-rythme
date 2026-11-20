@@ -535,7 +535,7 @@ function rhChart(c, diff) {  // the notes to hit, from the melody (plus the snar
     let lane = ((n.d % 4) + 4) % 4;
     if (lane === last && n.t - lastT < c.step * 2.5) lane = (lane + 1) % 4;
     const len = n.len >= hold ? n.len * c.step * .85 : 0;
-    notes.push({t: n.t, lane, len});
+    notes.push({t: n.t, lane, len, acc: n.downbeat ? (n.kind === 'B' ? 1 : .75) : n.step % 4 === 0 ? .45 : .25});  // acc : l'accent, pour le placement (Orbe, NeoTha)
     if (diff !== 'facile' && n.downbeat && (diff === 'expert' ? n.kind !== 'pont' : n.kind === 'B' && (diff === 'difficile' || n.step % 32 === 0))) notes.push({t: n.t, lane: (lane + 2) % 4, len: 0});
     last = lane; lastT = n.t;
   }
@@ -610,36 +610,78 @@ async function rhAnalyse(buf) {
 }
 const rhTier = d => { const n = /^S\d+$/.test(d) ? +d.slice(1) : 0; return n ? (n <= 2 ? 'facile' : n <= 4 ? 'normal' : n <= 7 ? 'difficile' : 'expert') : d; };
 function rhChartImport(a, diff) {  // diff : facile…expert, ou « S5 » = niveau à 5 étoiles
-  const S = /^S\d+$/.test(diff) ? +diff.slice(1) : 0, D = rhTier(diff);
-  const sub = S ? (S <= 2 ? 1 : S <= 5 ? 2 : 4) : {facile: 1, normal: 2, difficile: 4, expert: 4}[diff], nps = S ? [1, 1.5, 2.1, 2.8, 3.5, 4.3, 5.1, 6, 7, 8][S - 1] : {facile: 1.1, normal: 2, difficile: 3.1, expert: 4.4}[diff], gap = S ? Math.max(.09, Math.min(.42, .5 - S * .04)) : {facile: .42, normal: .24, difficile: .14, expert: .1}[diff];
-  const slot = a.beat / sub, cands = new Map();
-  for (const p of a.peaks) {  // each onset snaps to the nearest slot of the grid, if it is close enough
-    const j = Math.round((p.t - a.beat0) / slot), t = a.beat0 + j * slot;
-    if (Math.abs(p.t - t) > slot * .4 || t < 1 || t > a.len - .6) continue;
-    const s = p.s * (j % sub === 0 ? 1.3 : 1), o = cands.get(j);
+  // comme un mapper : 1. chaque attaque entendue se cale sur la grille (doubles-croches, ou triolets s'ils collent mieux) ; 2. sa force compte
+  // plus sur le temps que entre deux ; 3. la densité suit l'énergie du morceau (refrains chargés, couplets plus légers, pauses dans les passages
+  // calmes) ; 4. les rafales de doubles-croches sont réservées aux niveaux durs et bornées ; 5. un même rythme de mesure reprend le même motif
+  // de pistes (en miroir une fois sur deux) ; 6. les accents forts deviennent des accords dans les niveaux durs.
+  const S = /^S\d+$/.test(diff) ? +diff.slice(1) : 0, D = rhTier(diff), lv = S || {facile: 2, normal: 4, difficile: 6.5, expert: 8.5}[diff];
+  const nps = S ? [1, 1.5, 2.1, 2.8, 3.5, 4.3, 5.1, 6, 7, 8][S - 1] : {facile: 1.1, normal: 2, difficile: 3.1, expert: 4.4}[diff];
+  const gap = Math.max(.09, Math.min(.6, 1.05 / nps - .05)), U = a.beat / 12, K = t => Math.round((t - a.beat0) / U);  // U : 1/12 de temps (doubles-croches et triolets)
+  const step = lv <= 2.5 ? 12 : lv <= 5 ? 6 : 3, trip = lv >= 6, burst = lv < 5 ? 1 : lv < 6 ? 2 : lv < 7 ? 3 : lv < 8.5 ? 5 : lv < 9.5 ? 9 : 17;
+  // l'énergie, lissée sur un temps et ramenée entre 0 et 1 (0 = le plus calme, 1 = le refrain)
+  const W = Math.max(1, Math.round(a.fps * a.beat)), en = new Float32Array(a.rms.length); let s0 = 0;
+  for (let i = 0; i < a.rms.length; i++) { s0 += a.rms[i]; if (i >= W) s0 -= a.rms[i - W]; en[Math.max(0, i - (W >> 1))] = s0 / Math.min(i + 1, W); }
+  const srt = Float32Array.from(en).sort(), lo = srt[Math.floor(srt.length * .1)] || 0, hi = srt[Math.floor(srt.length * .95)] || 1;
+  const E = t => { const v = en[Math.max(0, Math.min(en.length - 1, Math.round(t * a.fps)))]; return Math.max(0, Math.min(1, (v - lo) / (hi - lo || 1))); };
+  // 1-2. les candidats sur la grille permise à ce niveau
+  const cands = new Map();
+  for (const p of a.peaks) {
+    const fb = (p.t - a.beat0) / a.beat, b = Math.floor(fb), ph = fb - b, q4 = Math.round(ph * 4) / 4, q3 = Math.round(ph * 3) / 3;
+    let j = b * 12 + Math.round((trip && Math.abs(ph - q3) < Math.abs(ph - q4) * .6 && Math.abs(ph - q3) < .06 ? q3 : q4) * 12);
+    if (j % step && !(trip && j % 4 === 0)) j = Math.round(j / step) * step;  // pas permis à ce niveau : sur la case permise la plus proche
+    const t = a.beat0 + j * U; if (Math.abs(p.t - t) > a.beat * .2 || t < 1 || t > a.len - .6) continue;
+    const m = j % 12 === 0 ? 1.35 : j % 6 === 0 ? 1.1 : j % 3 === 0 ? .9 : .85, s = p.s * m * (.6 + .8 * E(t)), o = cands.get(j);
     if (!o || s > o.s) cands.set(j, {j, t, s, band: p.band, f: p.f});
   }
-  const sorted = [...cands.values()].sort((x, y) => y.s - x.s), want = Math.min(sorted.length, Math.round(nps * a.len)), picked = [];
-  const taken = new Set(), cell = t => Math.floor(t / gap);
-  for (const c of sorted) {
-    if (picked.length >= want) break;
-    const z = cell(c.t); let ok = true;
-    for (const q of [z - 1, z, z + 1]) for (const o of taken.has(q) ? picked.filter(p => cell(p.t) === q) : []) if (Math.abs(o.t - c.t) < gap) ok = false;
-    if (ok) { picked.push(c); taken.add(z); }
-  }
-  picked.sort((x, y) => x.t - y.t);
-  const strong = [...picked].sort((x, y) => y.s - x.s)[Math.floor(picked.length * .12)]?.s ?? Infinity, notes = [];
-  let last = -1, lastT = -9;
-  picked.forEach((c, i) => {
-    let lane = c.band;  // low sounds on the left, high ones on the right
-    if (lane === last && c.t - lastT < .3) lane = (lane + (i % 2 ? 1 : 3)) % 4;
-    const next = picked[i + 1]?.t ?? a.len, room = next - c.t, f2 = Math.round(c.f + a.fps * a.beat), held = a.rms[f2] >= a.rms[c.f] * .4;
-    const need = D === 'facile' ? 1.4 : 1.1, len = (D !== 'expert' || room >= a.beat * 2) && room >= a.beat * need && (held || room >= a.beat * 1.8) ? Math.min(room - a.beat * .3, a.beat * 3) * .9 : 0;
-    notes.push({t: c.t, lane, len});
-    if (D === 'expert' && c.s >= strong) notes.push({t: c.t, lane: (lane + 2) % 4, len: 0});
-    last = lane; lastT = c.t;
+  // 3. le nombre de notes par tranche de 2 mesures suit l'énergie (une tranche très calme : presque une pause)
+  const span = a.beat * 8, nW = Math.ceil(a.len / span), wt = Array.from({length: nW}, (_, i) => { const t = (i + .5) * span, raw = en[Math.min(en.length - 1, Math.round(t * a.fps))]; return raw < hi * .12 ? .15 : .4 + 1.2 * E(t); });
+  const k0 = nps * a.len / wt.reduce((x, y) => x + y, 0), byW = Array.from({length: nW}, () => []);
+  for (const c of cands.values()) byW[Math.min(nW - 1, Math.floor(c.t / span))].push(c);
+  let picked = [];
+  byW.forEach((list, i) => {
+    const want = Math.round(k0 * wt[i]), mine = [];
+    for (const c of list.sort((x, y) => y.s - x.s)) { if (mine.length >= want) break; if (mine.every(o => Math.abs(o.t - c.t) >= (lv >= 6 ? U * 2.9 : gap - 1e-6))) mine.push(c); }  // les niveaux durs : jusqu'à la double-croche, les rafales bornées plus bas
+    picked.push(...mine);
   });
+  picked.sort((x, y) => x.t - y.t);
+  // 4. une rafale (notes à moins d'un quart de temps) plus longue que permis : la plus faible saute, jusqu'à ce que ça passe
+  for (let again = true; again;) { again = false; let r0 = 0;
+    for (let i = 1; i <= picked.length; i++) {
+      if (i < picked.length && picked[i].j - picked[i - 1].j <= 3) continue;
+      if (i - r0 > burst) { let w = r0 + 1; for (let k = r0 + 1; k < i - 1; k++) if (picked[k].s < picked[w].s) w = k; picked.splice(w, 1); again = true; break; }
+      r0 = i;
+    } }
+  // 5-6. les pistes : graves à gauche, aigus à droite, le motif d'une mesure repris quand son rythme revient ; accords sur les accents
+  const ord = picked.map(c => c.s).sort((x, y) => y - x), top = ord[Math.floor(ord.length * (D === 'expert' ? .12 : D === 'difficile' ? .05 : 0))] ?? Infinity, ref = ord[Math.floor(ord.length * .05)] || 1;
+  const bars = new Map(), seen = new Map(), notes = [];
+  for (const c of picked) { const b = Math.floor(c.j / 48); if (!bars.has(b)) bars.set(b, []); bars.get(b).push(c); }
+  let last = -1, lastT = -9;
+  for (const [, cs] of bars) {
+    const sig = cs.map(c => c.j % 48).join(','), was = seen.get(sig), lanes = [];
+    cs.forEach((c, i) => {
+      let lane = was ? (was.n % 2 ? 3 - was.lanes[i] : was.lanes[i]) : c.band;
+      if (!was && i && cs[i - 1].j + 3 >= c.j) lane = (lanes[i - 1] + (cs[0].band < 2 ? 1 : 3)) % 4;  // une rafale roule dans un sens
+      if (lane === last && c.t - lastT < (D === 'expert' ? .16 : .3)) lane = (lane + (i % 2 ? 1 : 3)) % 4;  // pas deux fois la même touche trop vite
+      lanes.push(lane);
+      const next = picked[picked.indexOf(c) + 1]?.t ?? a.len, room = next - c.t, f2 = Math.round(c.f + a.fps * a.beat), held = a.rms[f2] >= a.rms[c.f] * .4;
+      const need = D === 'facile' ? 1.4 : 1.1, len = (D !== 'expert' || room >= a.beat * 2) && room >= a.beat * need && (held || room >= a.beat * 1.8) ? Math.min(room - a.beat * .3, a.beat * 3) * .9 : 0;
+      const acc = Math.min(1, c.s / ref);
+      notes.push({t: c.t, lane, len, acc});
+      if ((D === 'expert' || D === 'difficile') && c.s >= top && c.j % 12 === 0 && room > .12) notes.push({t: c.t, lane: (lane + 2) % 4, len: 0, acc});
+      last = lane; lastT = c.t;
+    });
+    seen.set(sig, {lanes: was ? was.lanes : lanes, n: was ? was.n + 1 : 0});
+  }
   return notes.map(n => ({...n, judged: false, held: false}));
+}
+{ // contrôle : une musique faite de doubles-croches régulières, plus forte sur les temps et dans sa seconde moitié
+  const fps = 86, len = 60, beat = .5, peaks = [], rms = new Float32Array(len * fps);
+  for (let i = 0; i < rms.length; i++) rms[i] = i / fps > 30 ? .5 : .1;
+  for (let t = 1; t < len - 1; t += beat / 4) peaks.push({t, s: Math.round((t - 1) / beat * 4) % 4 ? 1 : 2, band: Math.round(t * 4) % 4, f: Math.round(t * fps)});
+  const A = {bpm: 120, beat, beat0: 0, peaks, rms, fps, len}, ez = rhChartImport(A, 'facile'), ex = rhChartImport(A, 'expert');
+  const runs = ns => { ns = ns.filter((n, i) => !i || n.t !== ns[i - 1].t); let m = 1, r = 1; for (let i = 1; i < ns.length; i++) { r = ns[i].t - ns[i - 1].t < beat / 4 + .01 ? r + 1 : 1; m = Math.max(m, r); } return m; };
+  console.assert(ez.every(n => Math.abs(((n.t / beat) % 1 + 1) % 1) < .01 || Math.abs(((n.t / beat) % 1) - 1) < .01) && ex.length > ez.length * 2.5 && runs(ex) <= 9 && runs(ez) === 1 && ez.length === new Set(ez.map(n => n.t)).size
+    && ex.filter(n => n.t > 30).length > ex.filter(n => n.t < 30).length * 1.4, 'rhChartImport');
 }
 const rhImports = () => gstore('rhythmImports', []);
 const rhAnalysed = new Map();  // id -> {a, buffer}, for this session (recomputed from the sound: same notes on every PC)
