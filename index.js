@@ -594,19 +594,28 @@ async function rhAnalyse(buf) {
   for (let L = lmin; L <= lmax + 1; L++) { let s = 0; for (let f = 0; f + L < F; f += 2) s += env[f] * env[f + L]; ac[L] = s; }
   for (let L = lmin + 1; L <= lmax; L++) { const w = Math.exp(-.5 * (Math.log2(fps * 60 / L / 120) / .8) ** 2), s = ac[L] * w; if (s > bestS) { bestS = s; bestL = L; } }
   const a0 = ac[bestL - 1], a1 = ac[bestL], a2 = ac[bestL + 1], shift = a0 - 2 * a1 + a2 ? .5 * (a0 - a2) / (a0 - 2 * a1 + a2) : 0;
-  const P = bestL + Math.max(-.5, Math.min(.5, shift)), bpm = Math.round(fps * 60 / P * 10) / 10;
-  // where the beats fall: the phase whose comb of beats collects the most onsets
-  let ph = 0, phS = -1;
-  for (let p = 0; p < P; p++) { let s = 0; for (let t = p; t < F; t += P) s += env[Math.round(t)] + .5 * (env[Math.round(t) + 1] || 0); if (s > phS) { phS = s; ph = p; } }
+  // where the beats fall, and the exact tempo: the grid that lands on the most attacks over the WHOLE song (the kick and the snare count
+  // more than the hi-hats, which play between the beats). A tempo off by 0.1 % drifts by a quarter of a beat over 3 minutes, so it is searched
+  // finely, first roughly then around the best (the attack curve smoothed over 3 frames, read between frames)
+  const lo3 = new Float32Array(F); for (let f = 1; f < F - 1; f++) { const v = q => band[0][q] * 1.5 + band[1][q] + band[2][q] * .7 + band[3][q] * .3; lo3[f] = v(f) + .5 * (v(f - 1) + v(f + 1)); }
+  const at = t => { const i = Math.floor(t), k = t - i; return i >= 0 && i + 1 < F ? lo3[i] * (1 - k) + lo3[i + 1] * k : 0; };
+  const comb = (p, q) => { let s = 0; for (let t = q; t < F - 1; t += p) s += at(t) + .25 * at(t + p / 2); return s; };
+  let P = bestL + Math.max(-.5, Math.min(.5, shift)), ph = 0;
+  for (const [span, dp, dq] of [[.01, .0002, 1], [.0004, .00002, .25]]) {
+    let best = -1, bp = P, bq = ph; const q0 = span > .001 ? 0 : ph - 2, q1 = span > .001 ? P : ph + 2;
+    for (let d = -span; d <= span + 1e-9; d += dp) { const p = P * (1 + d); for (let q = q0; q < q1; q += dq) { const s = comb(p, ((q % p) + p) % p); if (s > best) { best = s; bp = p; bq = ((q % p) + p) % p; } } }
+    P = bp; ph = bq; await Y();
+  }
+  const bpm = Math.round(fps * 60 / P * 10) / 10;
   // onsets: local maxima clearly above the surroundings (1 s window)
   const peaks = [], W1 = Math.round(fps * .5);
   for (let f = 3; f < F - 3; f++) {
     const v = env[f]; if (v <= 0 || v < env[f - 1] || v < env[f + 1] || v < env[f - 2] || v < env[f + 2] || v < env[f - 3] || v < env[f + 3]) continue;
     let m = 0, m2 = 0, c = 0; for (let j = Math.max(0, f - W1); j < Math.min(F, f + W1); j += 2) { m += env[j]; m2 += env[j] * env[j]; c++; }
     m /= c; const sd = Math.sqrt(Math.max(0, m2 / c - m * m));
-    if (v > m + .6 * sd) { let bb = 0; for (let q = 1; q < 4; q++) if (band[q][f] * (1 + q * .15) > band[bb][f] * (1 + bb * .15)) bb = q; peaks.push({t: f / fps + N / 2 / sr, s: v, band: bb, f}); }
+    if (v > m + .6 * sd) { let bb = 0; for (let q = 1; q < 4; q++) if (band[q][f] * (1 + q * .15) > band[bb][f] * (1 + bb * .15)) bb = q; peaks.push({t: f / fps + N / 2 / sr + .01, s: v, band: bb, f}); }
   }
-  return {bpm, beat: 60 / bpm, beat0: ph / fps + N / 2 / sr, peaks, rms, fps, len: buf.duration};
+  return {bpm, beat: P / fps, beat0: ph / fps + N / 2 / sr + .01, peaks, rms, fps, len: buf.duration};  // beat: not from the rounded bpm, which drifts
 }
 const rhTier = d => { const n = /^S\d+$/.test(d) ? +d.slice(1) : 0; return n ? (n <= 2 ? 'facile' : n <= 4 ? 'normal' : n <= 7 ? 'difficile' : 'expert') : d; };
 function rhChartImport(a, diff) {  // diff : facile…expert, ou « S5 » = niveau à 5 étoiles
