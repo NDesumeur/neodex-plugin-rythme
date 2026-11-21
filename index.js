@@ -526,21 +526,21 @@ function rhCompose(song) {
   }
   return {events: events.sort((a, b) => a.t - b.t), lead, len: bar * 16 * step, step};
 }
-function rhChart(c, diff) {  // the notes to hit, from the melody (plus the snare in hard, the kick too in expert)
+function rhChart(c, diff, K = 4) {  // the notes to hit, from the melody (plus the snare in hard, the kick too in expert)
   const grid = {facile: 4, normal: 2, difficile: 1, expert: 1}[diff], hold = {facile: 8, normal: 6, difficile: 4, expert: 4}[diff], notes = [];
   let last = -1, lastT = -9;
   for (const n of c.lead) {
     if (n.step % grid) continue;
     if (diff === 'facile' && n.t - lastT < c.step * 3.5) continue;
-    let lane = ((n.d % 4) + 4) % 4;
-    if (lane === last && n.t - lastT < c.step * 2.5) lane = (lane + 1) % 4;
+    let lane = ((n.d % K) + K) % K;
+    if (lane === last && n.t - lastT < c.step * 2.5) lane = (lane + 1) % K;
     const len = n.len >= hold ? n.len * c.step * .85 : 0;
     notes.push({t: n.t, lane, len, acc: n.downbeat ? (n.kind === 'B' ? 1 : .75) : n.step % 4 === 0 ? .45 : .25});  // acc : l'accent, pour le placement (Orbe, NeoTha)
-    if (diff !== 'facile' && n.downbeat && (diff === 'expert' ? n.kind !== 'pont' : n.kind === 'B' && (diff === 'difficile' || n.step % 32 === 0))) notes.push({t: n.t, lane: (lane + 2) % 4, len: 0});
+    if (diff !== 'facile' && n.downbeat && (diff === 'expert' ? n.kind !== 'pont' : n.kind === 'B' && (diff === 'difficile' || n.step % 32 === 0))) notes.push({t: n.t, lane: (lane + (K >> 1)) % K, len: 0});
     last = lane; lastT = n.t;
   }
   const extra = diff === 'expert' ? ['snare', 'kick'] : diff === 'difficile' ? ['snare'] : [];
-  for (const e of c.events) if (extra.includes(e.k) && !notes.some(n => Math.abs(n.t - e.t) < c.step * (e.k === 'kick' ? 1.1 : 1.5))) notes.push({t: e.t, lane: last = (last + 1) % 4, len: 0});
+  for (const e of c.events) if (extra.includes(e.k) && !notes.some(n => Math.abs(n.t - e.t) < c.step * (e.k === 'kick' ? 1.1 : 1.5))) notes.push({t: e.t, lane: last = (last + 1) % K, len: 0});
   return notes.sort((a, b) => a.t - b.t).map(n => ({...n, judged: false, held: false}));
 }
 
@@ -618,7 +618,7 @@ async function rhAnalyse(buf) {
   return {bpm, beat: P / fps, beat0: ph / fps + N / 2 / sr + .01, peaks, rms, fps, len: buf.duration};  // beat: not from the rounded bpm, which drifts
 }
 const rhTier = d => { const n = /^S\d+$/.test(d) ? +d.slice(1) : 0; return n ? (n <= 2 ? 'facile' : n <= 4 ? 'normal' : n <= 7 ? 'difficile' : 'expert') : d; };
-function rhChartImport(a, diff) {  // diff : facile…expert, ou « S5 » = niveau à 5 étoiles
+function rhChartImport(a, diff, NK = 4) {  // diff : facile…expert, ou « S5 » = niveau à 5 étoiles
   // comme un mapper : 1. chaque attaque entendue se cale sur la grille (doubles-croches, ou triolets s'ils collent mieux) ; 2. sa force compte
   // plus sur le temps que entre deux ; 3. la densité suit l'énergie du morceau (refrains chargés, couplets plus légers, pauses dans les passages
   // calmes) ; 4. les rafales de doubles-croches sont réservées aux niveaux durs et bornées ; 5. un même rythme de mesure reprend le même motif
@@ -668,15 +668,15 @@ function rhChartImport(a, diff) {  // diff : facile…expert, ou « S5 » = nive
   for (const [, cs] of bars) {
     const sig = cs.map(c => c.j % 48).join(','), was = seen.get(sig), lanes = [];
     cs.forEach((c, i) => {
-      let lane = was ? (was.n % 2 ? 3 - was.lanes[i] : was.lanes[i]) : c.band;
-      if (!was && i && cs[i - 1].j + 3 >= c.j) lane = (lanes[i - 1] + (cs[0].band < 2 ? 1 : 3)) % 4;  // une rafale roule dans un sens
-      if (lane === last && c.t - lastT < (D === 'expert' ? .16 : .3)) lane = (lane + (i % 2 ? 1 : 3)) % 4;  // pas deux fois la même touche trop vite
+      let lane = was ? (was.n % 2 ? NK - 1 - was.lanes[i] : was.lanes[i]) : Math.round(c.band * (NK - 1) / 3);
+      if (!was && i && cs[i - 1].j + 3 >= c.j) lane = (lanes[i - 1] + (cs[0].band < 2 ? 1 : NK - 1)) % NK;  // une rafale roule dans un sens
+      if (lane === last && c.t - lastT < (D === 'expert' ? .16 : .3)) lane = (lane + (i % 2 ? 1 : NK - 1)) % NK;  // pas deux fois la même touche trop vite
       lanes.push(lane);
       const next = picked[picked.indexOf(c) + 1]?.t ?? a.len, room = next - c.t, f2 = Math.round(c.f + a.fps * a.beat), held = a.rms[f2] >= a.rms[c.f] * .4;
       const need = D === 'facile' ? 1.4 : 1.1, len = (D !== 'expert' || room >= a.beat * 2) && room >= a.beat * need && (held || room >= a.beat * 1.8) ? Math.min(room - a.beat * .3, a.beat * 3) * .9 : 0;
       const acc = Math.min(1, c.s / ref);
       notes.push({t: c.t, lane, len, acc});
-      if ((D === 'expert' || D === 'difficile') && c.s >= top && c.j % 12 === 0 && room > .12) notes.push({t: c.t, lane: (lane + 2) % 4, len: 0, acc});
+      if ((D === 'expert' || D === 'difficile') && c.s >= top && c.j % 12 === 0 && room > .12) notes.push({t: c.t, lane: (lane + (NK >> 1)) % NK, len: 0, acc});
       last = lane; lastT = c.t;
     });
     seen.set(sig, {lanes: was ? was.lanes : lanes, n: was ? was.n + 1 : 0});
@@ -785,7 +785,7 @@ function rhHook(o) {  // à chaque changement du combo (en partie) : un clic s'i
 function rhAudio() {
   rhCtx ??= new AudioContext();
   if (!rhNoise) { rhNoise = rhCtx.createBuffer(1, rhCtx.sampleRate, rhCtx.sampleRate); const d = rhNoise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
-  if (!rhOut) { rhOut = rhCtx.createGain(); rhOut.connect(rhCtx.destination); }
+  if (!rhOut) { rhOut = rhCtx.createGain(); rhOut.connect(rhCtx.destination); rhAn = rhCtx.createAnalyser(); rhAn.fftSize = 256; rhOut.connect(rhAn); }  // l'analyseur : pour le fond « visualiseur »
   rhOut.gain.value = +$('rhVol').value / 100 * .6;
   rhKit ??= rhKitMake();
 }
@@ -851,33 +851,384 @@ const rhOver = () => {
 const rhBar = p => { const b = rhOver().querySelector('.rhBar'); b.hidden = p == null; if (p != null) b.querySelector('b').style.width = Math.round(p * 100) + '%'; };
 function rhCount() {  // 3, 2, 1 jusqu'au départ de la musique (l'horloge audio : une pause arrête le compte)
   const c = rhOver().querySelector('.rhCount'), tick = () => {
-    const left = rh && rhCtx && (rh.mode === 'play' || rh.mode === 'pause') ? rh.t0 - rhCtx.currentTime : 0, n = left > 0 && left <= 3 ? String(Math.ceil(left)) : '';
+    const left = rh && rhCtx && (rh.mode === 'play' || rh.mode === 'pause') ? rh.tStart - rhCtx.currentTime : 0, n = left > 0 && left <= 3 ? String(Math.ceil(left)) : '';
     if (c.textContent !== n) c.textContent = n;
     if (left > 0) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);  // après le passage en mode « play »
 }
-let rhTok = 0;
-// i: index of a song of the game, or the id of an imported music
-async function rhSelect(i, diff) { const me = rhTok + 1; rhBar(.03); try { return await rhPrepare(i, diff); } finally { if (me === rhTok) rhBar(null); } }
-async function rhPrepare(i, diff) {
-  let info, c, notes; const tok = ++rhTok;
-  if (rh) { try { rh.src?.stop(); } catch {} rh.mode = 'load'; }  // la musique entière doit être prête avant de pouvoir lancer
-  if (typeof i === 'number') { const song = RH_SONGS[i] || RH_SONGS[0]; c = rhCompose(song); notes = rhChart(c, diff); info = {name: song.name, bpm: song.bpm, key: 'rh' + RH_SONGS.indexOf(song) + diff};
-    const buffer = await rhRenderSong(RH_SONGS.indexOf(song), c); c = {events: [], lead: [], len: c.len, step: c.step, buffer}; }
-  else {
-    const imp = rhImports().find(x => x.id === i); if (!imp) return rhSelect(0, diff);
-    const {a, buffer} = await rhLoadImport(imp);
-    c = {events: [], lead: [], len: a.len, step: a.beat / 4, buffer}; notes = rhChartImport(a, diff); info = {name: imp.name, bpm: a.bpm, key: 'rhx' + imp.id + diff};
+// les réglages de jeu de la 1.9.0 (gardés dans rythmPrefs, comme le volume)
+const RH_N = (a, b, f = String) => Array.from({length: b - a + 1}, (_, i) => [String(a + i), f(a + i)]);
+const RH_OPT = [
+  ['rhK', 'Voies', RH_N(4, 7, n => n + ' voies'), '4'],
+  ['rhSpd', 'Vitesse', [['0', 'Auto'], ...RH_N(1, 10)], '0'],
+  ['rhRate', 'Taux', ['0.5', '0.6', '0.7', '0.75', '0.8', '0.85', '0.9', '0.95', '1', '1.05', '1.1', '1.15', '1.2', '1.25', '1.3', '1.4', '1.5', '1.75', '2'].map(v => [v, '×' + v.replace('.', ',')]), '1'],
+  ['rhOD', 'Sévérité', RH_N(0, 10, n => 'OD ' + n), '5'],
+  ['rhHold', 'Notes longues', [['0', 'Début'], ['1', 'Début et fin']], '0'],
+  ['rhMine', 'Mines', [['0', 'Non'], ['1', 'Oui']], '0'],
+  ['rhSkin', 'Notes', [['0', 'Barres'], ['1', 'Flèches'], ['2', 'Cercles']], '0'],
+  ['rhSnap', 'Couleurs', [['0', 'Par voie'], ['1', 'Par temps']], '0'],
+  ['rhClean', 'Écran', [['0', 'Complet'], ['1', 'Épuré']], '0'],
+  ['rhBg', 'Fond', [['0', 'Uni'], ['1', 'Visualiseur']], '0'],
+];
+let rhAn = null, rhAnData = null;
+/* ---------- 1.9.0 : de 4 à 7 voies, taux de lecture qui garde la hauteur, sévérité, mines, fins de notes longues, compétences ---------- */
+const RH_KEYSETS = {4: ['d', 'f', 'j', 'k'], 5: ['d', 'f', ' ', 'j', 'k'], 6: ['s', 'd', 'f', 'j', 'k', 'l'], 7: ['s', 'd', 'f', ' ', 'j', 'k', 'l']};
+const RH_ARROWS = ['ArrowLeft', 'ArrowDown', 'ArrowUp', 'ArrowRight'];  // toujours actives en 4 voies
+function rhLanes(K) {  // la largeur des voies et leurs couleurs (symétriques, la voie du milieu en or)
+  const LW = {4: 40, 5: 32, 6: 27, 7: 23}[K] || 40, X0 = Math.round((RH.W - LW * K) / 2), mid = (K - 1) / 2;
+  const cols = K === 4 ? RH.COLORS : Array.from({length: K}, (_, i) => i === mid ? '#ffd07a' : ['#ff5ad9', '#7fe0ee', '#8ee8a0'][Math.min(i, K - 1 - i) % 3]);
+  return {K, LW, X0, cols};
+}
+const rhWinFor = od => { const k = 1.3 - .06 * od; return RH.WIN.map(([w, ...r]) => [w * k, ...r]); };  // OD 5 : les fenêtres d'avant (±45, ±90, ±140 ms)
+// la couleur d'une note selon sa place dans le temps (comme en DDR) : rouge sur le temps, bleu sur la croche, violet en triolet, jaune sur la double-croche…
+const RH_SNAP = [[1, '#ff4f6d'], [2, '#4f8bff'], [3, '#c06bff'], [4, '#ffd34f'], [6, '#ff8fe6'], [8, '#ff9a3a'], [12, '#7fe0ee'], [16, '#8ee8a0']];
+function rhSnap(t, b0, beat) { const f = (t - b0) / beat, tol = .012 / beat; for (const [d, c] of RH_SNAP) if (Math.abs(f * d - Math.round(f * d)) < tol * d) return c; return '#9a9ab0'; }
+console.assert(rhSnap(1, 0, .5) === '#ff4f6d' && rhSnap(1.25, 0, .5) === '#4f8bff' && rhSnap(1.125, 0, .5) === '#ffd34f' && rhSnap(.5 / 3, 0, .5) === '#c06bff', 'rhSnap');
+const rhHash = s => [...s].reduce((h, c) => (Math.imul(h, 33) + c.charCodeAt(0)) >>> 0, 5381).toString(36);
+function rhMines(notes, K, key) {  // les mines (à ne pas toucher) : dans les trous assez longs, sur une voie libre, toujours aux mêmes endroits
+  const r = seeded(parseInt(rhHash(key), 36) | 0), real = notes.filter(n => !n.mine), out = [];
+  for (let i = 0; i + 1 < real.length; i++) {
+    const a = real[i], gap = real[i + 1].t - a.t; if (gap < .22 || r() > .3) continue;
+    const t = a.t + gap / 2, busy = new Set();
+    for (let j = Math.max(0, i - 8); j < Math.min(real.length, i + 9); j++) { const n = real[j]; if (Math.abs(n.t - t) < .25 || (n.len && n.t <= t + .1 && n.t + n.len >= t - .1)) busy.add(n.lane); }
+    const free = [...Array(K).keys()].filter(l => !busy.has(l)); if (free.length) out.push({t, lane: free[Math.floor(r() * free.length)], len: 0, mine: true, judged: false, held: false});
   }
+  return notes.concat(out).sort((x, y) => x.t - y.t);
+}
+// jouer plus vite ou plus lentement sans changer la hauteur (WSOLA) : des fenêtres de 23 ms recollées là où le son se ressemble le plus
+function rhWsola(chs, rate) {
+  const N = 1024, Ho = N / 2, Hi = Ho * rate, tol = 256, L = chs[0].length, n = Math.ceil(L / rate) + N, out = chs.map(() => new Float32Array(n));
+  const mono = chs.length === 1 ? chs[0] : Float32Array.from(chs[0], (v, i) => (v + chs[1][i]) / 2), w = Float32Array.from({length: N}, (_, i) => .5 - .5 * Math.cos(2 * Math.PI * i / N));
+  let prev = 0;
+  for (let k = 0, op = 0; op + N <= n; k++, op += Ho) {
+    let p = Math.round(k * Hi); if (p + N >= L) break;
+    if (k) {
+      const nat = prev + Ho, sc = (q, st) => { let s = 0; for (let i = 0; i < Ho; i += st) s += mono[nat + i] * mono[q + i]; return s; };
+      let best = -Infinity, bp = p;
+      for (let d = -tol; d <= tol; d += 8) { const q = p + d; if (q >= 0 && q + N < L) { const s = sc(q, 4); if (s > best) { best = s; bp = q; } } }
+      const c = bp; best = -Infinity;
+      for (let d = -7; d <= 7; d++) { const q = c + d; if (q >= 0 && q + N < L) { const s = sc(q, 2); if (s > best) { best = s; bp = q; } } }
+      p = bp;
+    }
+    for (let c = 0; c < chs.length; c++) { const x = chs[c], y = out[c]; for (let i = 0; i < N; i++) y[op + i] += x[p + i] * w[i]; }
+    prev = p;
+  }
+  return out;
+}
+{ // contrôle : un la (440 Hz) joué ×1,5 reste un la, et dure 1,5 fois moins
+  const sr = 44100, x = Float32Array.from({length: sr}, (_, i) => Math.sin(2 * Math.PI * 440 * i / sr)), [y] = rhWsola([x], 1.5), a = 4000, b = 24000; let z = 0;
+  for (let i = a; i < b; i++) if (y[i - 1] < 0 && y[i] >= 0) z++;
+  console.assert(Math.abs(z / ((b - a) / sr) - 440) < 12 && Math.abs(y.length - Math.ceil(sr / 1.5) - 1024) < 2, 'rhWsola', z);
+}
+const rhStretched = new Map();
+function rhStretch(key, buf, rate) {
+  if (rate === 1 || !buf) return buf; const k = key + '@' + rate; if (rhStretched.has(k)) return rhStretched.get(k);
+  const chs = Array.from({length: Math.min(2, buf.numberOfChannels)}, (_, c) => buf.getChannelData(c)), out = rhWsola(chs, rate), b = rhCtx.createBuffer(out.length, out[0].length, buf.sampleRate);
+  out.forEach((d, c) => b.copyToChannel(d, c)); if (rhStretched.size > 3) rhStretched.delete(rhStretched.keys().next().value); rhStretched.set(k, b); return b;
+}
+// la difficulté par compétence (comme le MSD d'Etterna) : sur des fenêtres de 2 s, la densité et la forme des notes (seules, en doubles,
+// en accords, la même touche répétée), puis la moyenne des 8 % de fenêtres les plus dures ; l'endurance regarde la durée de l'effort
+const RH_SKILLS = [['stream', 'Stream'], ['jumpstream', 'Jumpstream'], ['handstream', 'Handstream'], ['jack', 'Jacks'], ['chordjack', 'Chordjacks'], ['stamina', 'Endurance'], ['tech', 'Technique']];
+function rhSkills(notes, rate = 1) {
+  const ns = notes.filter(n => !n.mine).map(n => [n.t / rate, n.lane]).sort((a, b) => a[0] - b[0]), rows = [];
+  for (const [t, l] of ns) { const r = rows.at(-1); if (r && t - r.t < .008) r.l.push(l); else rows.push({t, l: [l]}); }
+  const z = Object.fromEntries(RH_SKILLS.map(([k]) => [k, 0])); if (rows.length < 8) return {...z, overall: 0};
+  rows.forEach((r, i) => { r.gap = i ? r.t - rows[i - 1].t : 1; r.jk = i > 0 && r.l.some(l => rows[i - 1].l.includes(l)); });
+  const P = {stream: [], jumpstream: [], handstream: [], jack: [], chordjack: [], tech: []}, t1 = rows.at(-1).t;
+  let a = 0;
+  for (let w0 = rows[0].t; w0 <= t1; w0 += .5) {
+    while (a < rows.length && rows[a].t < w0) a++;
+    let b = a; while (b < rows.length && rows[b].t < w0 + 2) b++;
+    const R = rows.slice(a, b); if (R.length < 3) { for (const k in P) P[k].push(0); continue; }
+    const nps = R.reduce((s, r) => s + r.l.length, 0) / 2, rps = R.length / 2, f = q => R.filter(q).length / R.length;
+    const one = f(r => r.l.length === 1), two = f(r => r.l.length === 2), many = f(r => r.l.length >= 3), jr = f(r => r.jk);
+    const jg = R.filter(r => r.jk).map(r => r.gap).sort((x, y) => x - y), jsp = jg.length ? 1 / Math.max(.05, jg[jg.length >> 1]) : 0;
+    const gs = R.slice(1).map(r => r.gap), gm = gs.reduce((s, x) => s + x, 0) / gs.length, cv = Math.sqrt(gs.reduce((s, x) => s + (x - gm) ** 2, 0) / gs.length) / gm;
+    P.stream.push(rps * 1.9 * (.4 + .6 * one) * (1 - .6 * jr));
+    P.jumpstream.push(nps * 1.5 * Math.min(1, two * 2.6) * (1 - .5 * jr));
+    P.handstream.push(nps * 1.45 * Math.min(1, many * 3.5) * (1 - .5 * jr));
+    P.jack.push(jsp * 1.75 * Math.min(1, jr * 1.6) * (.75 + .25 * one));
+    P.chordjack.push(jsp * nps / rps * 1.25 * Math.min(1, jr * 1.6) * (1 - one));
+    P.tech.push(rps * 1.6 * Math.min(1, cv * 1.4) + nps * .3 * Math.min(1, cv));
+  }
+  const top = v => { const s = [...v].sort((x, y) => y - x), k = Math.max(3, Math.ceil(s.length * .08)); return s.slice(0, k).reduce((x, y) => x + y, 0) / k; };
+  const out = {}; for (const k in P) out[k] = Math.round(top(P[k]) * 10) / 10;
+  const peak = P.stream.map((_, i) => Math.max(...Object.values(P).map(v => v[i]))).sort((x, y) => y - x), mid = peak.slice(0, Math.max(3, Math.ceil(peak.length * .6)));
+  out.stamina = Math.round(mid.reduce((x, y) => x + y, 0) / mid.length * (.75 + .25 * Math.min(2, (t1 - rows[0].t) / 120)) * 10) / 10;
+  const vs = Object.values(out).sort((x, y) => y - x); out.overall = Math.round((vs[0] * .85 + vs[1] * .15) * 10) / 10;
+  return out;
+}
+const rhMainSkill = s => RH_SKILLS.filter(([k]) => k !== 'stamina').reduce((m, [k]) => s[k] > s[m] ? k : m, 'stream');
+const rhSkillName = k => (RH_SKILLS.find(x => x[0] === k) || ['', ''])[1];
+{ // contrôle : une suite de notes seules est un stream, la même touche répétée des jacks, et ×1,5 rend tout plus dur
+  const st = Array.from({length: 200}, (_, i) => ({t: i / 8, lane: [0, 1, 2, 3, 2, 1][i % 6]})), jk = Array.from({length: 200}, (_, i) => ({t: i / 8, lane: Math.floor(i / 4) % 4}));
+  console.assert(rhMainSkill(rhSkills(st)) === 'stream' && rhMainSkill(rhSkills(jk)) === 'jack' && rhSkills(st, 1.5).stream > rhSkills(st).stream * 1.3, 'rhSkills');
+}
+// les ceintures, par compétence : ton niveau = la moyenne de tes 5 meilleures parties (difficulté × précision ; 95 % compte en entier)
+const RH_BELTS = [[0, 'blanche', '#f4ecff'], [7, 'jaune', '#ffd34f'], [10, 'orange', '#ff9a3a'], [13, 'verte', '#5ef08a'], [16, 'bleue', '#4f8bff'], [19, 'violette', '#c06bff'], [22, 'marron', '#c98a5a'], [25, 'rouge', '#ff4a5e'], [28, 'noire', '#8f7bb8']];
+const rhBelt = v => { let i = 0; while (i + 1 < RH_BELTS.length && v >= RH_BELTS[i + 1][0]) i++; return i; };
+const rhAccF = acc => Math.max(0, Math.min(1, (acc - .75) / .2)) ** 1.5;
+const RH_SK_KEYS = [...RH_SKILLS.map(x => x[0]), 'overall'];
+function rhRatings() {
+  const L = games.rhPlays || [], out = {};
+  RH_SK_KEYS.forEach((k, j) => { const v = L.map(p => (p.s[j] || 0) * rhAccF(p.a)).sort((x, y) => y - x).slice(0, 5); out[k] = Math.round(v.reduce((x, y) => x + y, 0) / 5 * 10) / 10; });
+  return out;
+}
+function rhPlayAdd(key, sk, acc) {  // gardées : seulement les parties qui comptent dans un top 5 (peu de données à synchroniser)
+  const L = (games.rhPlays ??= []); L.push({k: key, s: RH_SK_KEYS.map(k => sk[k] || 0), a: Math.round(acc * 1000) / 1000, d: Date.now()});
+  const keep = new Set(); RH_SK_KEYS.forEach((_, j) => [...L].sort((x, y) => y.s[j] * rhAccF(y.a) - x.s[j] * rhAccF(x.a)).slice(0, 5).forEach(p => keep.add(p)));
+  games.rhPlays = L.filter(p => keep.has(p));
+}
+// le défi du jour : un morceau, une difficulté et une contrainte tirés de la date (les mêmes pour tout le monde)
+const rhToday = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
+const RH_DMODS = [['taux ×1,1', {rate: 1.1}], ['avec des mines', {mine: 1}], ['fins de notes longues jugées', {hold: 1}], ['sévérité 8', {od: 8}], ['taux ×0,9 et sévérité 9', {rate: .9, od: 9}], ['en 7 voies', {K: 7}], ['en 5 voies', {K: 5}]];
+function rhDaily(day = rhToday()) { const r = seeded(day), i = Math.floor(r() * 1199), diff = ['normal', 'difficile', 'expert'][Math.floor(r() * 3)], m = RH_DMODS[Math.floor(r() * RH_DMODS.length)]; return {day, i, diff, mod: m[0], o: m[1]}; }
+function rhStreak() {  // les jours de suite avec le défi réussi (aujourd'hui compte s'il est fait, sinon on part d'hier)
+  const D = games.rhDaily || {}, d = new Date(); let n = 0;
+  const key = x => x.getFullYear() * 10000 + (x.getMonth() + 1) * 100 + x.getDate();
+  if (!D[key(d)]) d.setDate(d.getDate() - 1);
+  while (D[key(d)]) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+// le parcours de « dans » : 4 morceaux d'affilée, de plus en plus rapides ; la vie baisse à chaque erreur et ne remonte jamais
+function rhDanSongs(d) {
+  const diff = d <= 2 ? 'normal' : d <= 5 ? 'difficile' : 'expert', r = seeded(777 + d), lo = 80 + d * 8;
+  const pool = RH_SONGS.map((s, i) => i).filter(i => !RH_SONGS[i].last && RH_SONGS[i].bpm >= lo && RH_SONGS[i].bpm < lo + 30 && (RH_SONGS[i].len || 120) < 200), out = [];
+  while (out.length < 4 && pool.length) out.push(pool.splice(Math.floor(r() * pool.length), 1)[0]);
+  return out.sort((a, b) => RH_SONGS[a].bpm - RH_SONGS[b].bpm).map(i => ({i, diff}));
+}
+console.assert([1, 5, 10].every(d => rhDanSongs(d).length === 4), 'rhDanSongs');
+const RH_DAN = d => ({rate: d >= 9 ? Math.round((1 + (d - 8) * .1) * 100) / 100 : 1, drain: 4 + d * .6});
+const rhDanName = d => d === 1 ? '1er dan' : d + 'e dan';
+// les exercices : des motifs générés pour une compétence, sur une batterie simple, au tempo et à la durée choisis
+const RH_EX = {stream: 'Stream', jumpstream: 'Jumpstream', handstream: 'Handstream', jack: 'Jacks', chordjack: 'Chordjacks', stamina: 'Endurance', tech: 'Technique'};
+function rhExercise(skill, bpm, min, K) {
+  const r = seeded(bpm * 31 + min * 7 + K * 101 + skill.length * 977), step = 60 / bpm / 4, len = min * 60 + 4, n = Math.floor((len - 4) / step), notes = [], events = [];
+  const pickN = (k, avoid = []) => { const s = new Set(); for (let g = 0; s.size < Math.min(k, K) && g < 60; g++) { const l = Math.floor(r() * K); if (!avoid.includes(l) || g > 30) s.add(l); } return [...s]; };
+  let lane = 0, prev = [];
+  for (let i = 0; i < n; i++) {
+    const t = 2 + i * step, beat = i % 4 === 0;
+    if (i % 4 === 0) events.push({t, k: 'kick', v: 1}); if (i % 8 === 4) events.push({t, k: 'snare', v: .7}); if (i % 2 === 0) events.push({t, k: 'hat', v: .3});
+    if (i % 16 === 0) events.push({t, k: 'bass', f: 55, d: step * 4, v: .3});
+    let ls = null;
+    if (skill === 'stream' || skill === 'stamina') { lane = (lane + 1 + Math.floor(r() * (K - 1))) % K; ls = [lane]; }  // jamais deux fois la même touche
+    else if (skill === 'jumpstream') ls = pickN(beat || r() < .3 ? 2 : 1, prev);
+    else if (skill === 'handstream') ls = pickN(beat ? 3 : r() < .25 ? 2 : 1, prev);
+    else if (skill === 'jack') { if (i % 2) continue; if (i % 8 === 0) lane = Math.floor(r() * K); ls = [lane]; }
+    else if (skill === 'chordjack') { if (i % 2) continue; if (i % 8 === 0) prev = pickN(K >= 5 ? 3 : 2); ls = i % 8 === 4 ? pickN(1, prev).concat(prev.slice(1)) : prev.slice(); }
+    else { if (![1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1][i % 16]) continue; lane = (lane + 1 + Math.floor(r() * (K - 1))) % K; ls = [lane]; }  // technique : un rythme qui change
+    for (const l of ls) notes.push({t, lane: l, len: 0, judged: false, held: false});
+    prev = ls;
+  }
+  return {c: {events: events.sort((x, y) => x.t - y.t), lead: [], len, step}, notes};
+}
+console.assert(rhMainSkill(rhSkills(rhExercise('jack', 160, 1, 4).notes)) === 'jack' && rhExercise('stream', 160, 1, 7).notes.every(n => n.lane < 7), 'rhExercise');
+/* ---------- les maps d'autres jeux : osu!mania (.osz, .osu), StepMania (.sm, .ssc, dans un .zip ou avec leur musique) et Quaver (.qp) ---------- */
+function rhUnzip(buf) {  // -> Map nom -> {m, raw} : la méthode (0 stocké, 8 deflate) et les octets
+  const u = new Uint8Array(buf), dv = new DataView(u.buffer, u.byteOffset, u.byteLength), out = new Map(), dec = new TextDecoder();
+  let e = u.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('ce fichier n\'est pas une archive');
+  let p = dv.getUint32(e + 16, true);
+  for (let i = dv.getUint16(e + 10, true); i > 0 && dv.getUint32(p, true) === 0x02014b50; i--) {
+    const m = dv.getUint16(p + 10, true), cs = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), lo = dv.getUint32(p + 42, true);
+    const name = dec.decode(u.subarray(p + 46, p + 46 + nl)); p += 46 + nl + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+    const d0 = lo + 30 + dv.getUint16(lo + 26, true) + dv.getUint16(lo + 28, true);
+    if (!name.endsWith('/')) out.set(name, {m, raw: u.subarray(d0, d0 + cs)});
+  }
+  return out;
+}
+async function rhInflate(f) {
+  if (f.m === 0) return f.raw;
+  if (f.m !== 8) throw new Error('compression inconnue');
+  return new Uint8Array(await new Response(new Blob([f.raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+}
+function rhParseOsu(txt) {  // osu!mania : la colonne vient de x, les notes longues de leur fin
+  const S = {}; let sec = '';
+  for (const l of txt.replace(/^\uFEFF/, '').split(/\r?\n/)) { const t = l.trim(); if (!t || t.startsWith('//')) continue; const h = /^\[(\w+)\]$/.exec(t); if (h) S[sec = h[1]] = []; else S[sec]?.push(t); }
+  const kv = s => Object.fromEntries((S[s] || []).map(l => { const i = l.indexOf(':'); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; }));
+  const G = kv('General'), M = kv('Metadata'), D = kv('Difficulty');
+  if (+G.Mode !== 3) return null;
+  const K = Math.round(+D.CircleSize || 4); if (K < 4 || K > 7) return null;
+  const reds = (S.TimingPoints || []).map(l => l.split(',').map(Number)).filter(p => p.length >= 2 && p[1] > 0 && (p[6] == null || p[6] === 1)), notes = [];
+  for (const l of S.HitObjects || []) {
+    const f = l.split(','), t = +f[2] / 1000, type = +f[3]; if (!isFinite(t)) continue;
+    const end = type & 128 ? +String(f[5]).split(':')[0] / 1000 : 0;
+    notes.push({t, lane: Math.max(0, Math.min(K - 1, Math.floor(+f[0] * K / 512))), len: end > t ? end - t : 0});
+  }
+  if (!notes.length) return null;
+  const bg = (S.Events || []).map(l => /^0\s*,\s*0\s*,\s*"([^"]+)"/.exec(l)).find(Boolean);
+  const main = reds.length ? reds.map((p, i) => [p, (reds[i + 1]?.[0] ?? notes.at(-1).t * 1000) - p[0]]).sort((a, b) => b[1] - a[1])[0][0] : [0, 500];
+  return {K, notes, title: M.Title || '?', artist: M.Artist || '', version: M.Version || '?', audio: G.AudioFilename || '', bg: bg ? bg[1] : '', beat0: main[0] / 1000, beat: main[1] / 1000, src: 'osu!mania'};
+}
+function rhParseSm(txt) {  // StepMania (.sm, et .ssc avec ses #NOTEDATA) : des mesures de lignes, le tempo qui change, les arrêts, le décalage
+  const T = [...txt.replace(/\/\/[^\n]*/g, '').matchAll(/#([A-Z0-9]+):([^;]*);/gi)].map(m => [m[1].toUpperCase(), m[2]]), head = {}, charts = [];
+  let cur = null;
+  for (const [k, v] of T) {
+    if (k === 'NOTEDATA') { cur = {}; charts.push(cur); continue; }
+    if (k === 'NOTES' && !cur) { const p = v.split(':'); charts.push({STEPSTYPE: p[0], DIFFICULTY: p[2], METER: p[3], NOTES: p.slice(5).join(':')}); continue; }
+    if (cur && !cur.NOTES) cur[k] = v; else head[k] = v;
+  }
+  const STY = {'dance-single': 4, 'pump-single': 5, 'dance-solo': 6, 'kb7-single': 7}, out = [];
+  const timing = (bpms, stops, off) => {
+    const B = String(bpms || '0=120').split(',').map(x => x.split('=').map(Number)).filter(x => x.length === 2 && x[1] > 0).sort((a, b) => a[0] - b[0]);
+    const S = String(stops || '').split(',').map(x => x.split('=').map(Number)).filter(x => x.length === 2 && isFinite(x[1]));
+    return [b => { let t = -off, pb = 0, bpm = B[0]?.[1] || 120; for (const [bb, v] of B.slice(1)) { if (bb >= b) break; t += (bb - pb) * 60 / bpm; pb = bb; bpm = v; } t += (b - pb) * 60 / bpm; for (const [sb, s] of S) if (sb < b - 1e-6) t += s; return t; }, 60 / (B[0]?.[1] || 120)];
+  };
+  for (const c of charts) {
+    const K = STY[String(c.STEPSTYPE || '').trim()]; if (!K || !c.NOTES) continue;
+    const [at, beat] = timing(c.BPMS ?? head.BPMS, c.STOPS ?? head.STOPS, +(c.OFFSET ?? head.OFFSET) || 0), notes = [], open = {};
+    c.NOTES.split(',').forEach((meas, mi) => {
+      const rows = meas.split(/\s+/).filter(x => x.length >= K && /^[0-9MLFKA]+$/i.test(x));
+      rows.forEach((r, ri) => {
+        const t = at(mi * 4 + ri * 4 / rows.length);
+        for (let l = 0; l < K; l++) {
+          const ch = r[l].toUpperCase();
+          if (ch === '1' || ch === 'L') notes.push({t, lane: l, len: 0});
+          else if (ch === '2' || ch === '4') { const n = {t, lane: l, len: 0}; notes.push(n); open[l] = n; }
+          else if (ch === '3' && open[l]) { open[l].len = t - open[l].t; delete open[l]; }
+          else if (ch === 'M') notes.push({t, lane: l, len: 0, mine: true});
+        }
+      });
+    });
+    if (notes.some(n => !n.mine)) out.push({K, notes: notes.sort((a, b) => a.t - b.t), title: head.TITLE || '?', artist: head.ARTIST || '', version: (String(c.DIFFICULTY || '?').trim() + ' ' + String(c.METER || '').trim()).trim(), audio: head.MUSIC || '', bg: head.BACKGROUND || '', beat0: at(0), beat, src: 'StepMania'});
+  }
+  return out;
+}
+function rhParseQua(txt) {  // Quaver (.qua, du YAML) : Mode Keys4 ou Keys7, les objets avec leur voie (1 à K) et leur fin
+  const g = k => (new RegExp('^' + k + ':\\s*(.*)$', 'm').exec(txt)?.[1] || '').trim().replace(/^['"]|['"]$/g, '');
+  const K = {Keys4: 4, Keys7: 7}[g('Mode')]; if (!K) return null;
+  const list = name => {
+    const i = txt.search(new RegExp('^' + name + ':', 'm')), items = []; if (i < 0) return items; let cur = null;
+    for (const l of txt.slice(i).split(/\r?\n/).slice(1)) {
+      if (/^[^\s-]/.test(l)) break;
+      let s; if (l.startsWith('- ')) { items.push(cur = {}); s = l.slice(2); } else if (/^ {2}\w/.test(l)) s = l.slice(2); else continue;
+      const m = /^(\w+):\s*(.*)$/.exec(s); if (m && cur) cur[m[1]] = m[2].trim();
+    }
+    return items;
+  };
+  const notes = list('HitObjects').map(o => { const t = (+o.StartTime || 0) / 1000, e = (+o.EndTime || 0) / 1000; return {t, lane: Math.max(0, Math.min(K - 1, (+o.Lane || 1) - 1)), len: e > t ? e - t : 0}; });
+  if (!notes.length) return null;
+  const tp = list('TimingPoints')[0] || {}, beat = 60 / (+tp.Bpm || 120);
+  return {K, notes: notes.sort((a, b) => a.t - b.t), title: g('Title') || '?', artist: g('Artist'), version: g('DifficultyName') || '?', audio: g('AudioFile'), bg: g('BackgroundFile'), beat0: (+tp.StartTime || 0) / 1000, beat, src: 'Quaver'};
+}
+{ // contrôle des trois formats
+  const o = rhParseOsu('osu file format v14\n[General]\nAudioFilename: a.mp3\nMode: 3\n[Metadata]\nTitle:T\nVersion:7K\n[Difficulty]\nCircleSize:7\n[TimingPoints]\n100,500,4,2,0,50,1,0\n[HitObjects]\n36,192,1000,1,0,0:0:0:0:\n475,192,1500,128,0,2000:0:0:0:0:\n');
+  const s = rhParseSm('#TITLE:S;#MUSIC:s.ogg;#OFFSET:0.5;#BPMS:0=120,4=240;#NOTES:\n dance-single:\n x:\n Hard:\n 9:\n 0,0,0,0,0:\n1000\n0200\n0300\n0M00\n,\n0001\n;');
+  const q = rhParseQua('AudioFile: audio.mp3\nMode: Keys4\nTitle: Q\nTimingPoints:\n- StartTime: 50\n  Bpm: 150\nHitObjects:\n- StartTime: 1000\n  Lane: 4\n  KeySounds: []\n- Lane: 2\n  StartTime: 2000\n  EndTime: 2600\n');
+  console.assert(o && o.K === 7 && o.notes[0].lane === 0 && o.notes[1].lane === 6 && Math.abs(o.notes[1].len - .5) < 1e-9 && o.beat === .5
+    && s.length === 1 && s[0].notes.length === 4 && Math.abs(s[0].notes[0].t + .5) < 1e-9 && Math.abs(s[0].notes[1].len - .5) < 1e-9 && s[0].notes[2].mine && Math.abs(s[0].notes.at(-1).t - 1.5) < 1e-9
+    && q && q.notes.length === 2 && q.notes[0].lane === 3 && Math.abs(q.notes[1].len - .6) < 1e-9 && q.beat === .4, 'rhParse', o, s, q);
+}
+const rhCharts = () => gstore('rhythmCharts', []);
+const rhB64 = u => new Promise((ok, ko) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = () => ko(fr.error); fr.readAsDataURL(new Blob([u])); });
+async function rhFileBytes(n) { const b = await folder.readFile(n); if (b == null) throw new Error('les fichiers de cette map ne sont pas sur ce PC'); const t = atob(b), u = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i); return u.buffer; }
+async function rhChartsImport(files) {
+  const msg = t => { $('rhImpMsg').textContent = t; }, dec = u => new TextDecoder().decode(u), bag = new Map();
+  for (const f of files) {
+    msg('Lecture de « ' + f.name + ' »…');
+    if (/\.(osz|qp|zip)$/i.test(f.name)) { const z = rhUnzip(await f.arrayBuffer()); for (const [n, e] of z) bag.set(n.split('/').pop().toLowerCase(), {name: n, get: () => rhInflate(e)}); }
+    else bag.set(f.name.toLowerCase(), {name: f.name, get: async () => new Uint8Array(await f.arrayBuffer())});
+  }
+  const sets = [];
+  for (const [n, e] of bag) try {
+    if (/\.osu$/.test(n)) { const m = rhParseOsu(dec(await e.get())); if (m) sets.push(m); }
+    else if (/\.ssc$/.test(n) || (/\.sm$/.test(n) && !bag.has(n.replace(/\.sm$/, '.ssc')))) sets.push(...rhParseSm(dec(await e.get())));
+    else if (/\.qua$/.test(n)) { const m = rhParseQua(dec(await e.get())); if (m) sets.push(m); }
+  } catch {}
+  if (!sets.length) throw new Error('aucune map de 4 à 7 voies (osu!mania, StepMania ou Quaver) dans ce fichier');
+  const m0 = sets[0], an = bag.get(String(m0.audio).split(/[\\/]/).pop().toLowerCase()) || [...bag.values()].find(e => /\.(mp3|ogg|wav|m4a|flac|opus)$/i.test(e.name));
+  if (!an) throw new Error('la musique de la map manque (choisis-la en même temps que la map)');
+  const audio = await an.get(); if (audio.length > 15e6) throw new Error('la musique fait plus de 15 Mo');
+  const id = 'c' + rhHash(m0.artist + '|' + m0.title + '|' + m0.src), ext = (/\.(\w+)$/.exec(an.name)?.[1] || 'mp3').toLowerCase();
+  await rhChartDrop(id, true);
+  msg('Copie de la musique…'); await folder.writeFile(id + '-audio.' + ext, await rhB64(audio));
+  let bg = false; const be = m0.bg && bag.get(String(m0.bg).split(/[\\/]/).pop().toLowerCase());
+  if (be) try {  // le fond, réduit à la taille du jeu (240 × 320, en double)
+    const im = await createImageBitmap(new Blob([await be.get()])), c = document.createElement('canvas'), k = Math.max(480 / im.width, 640 / im.height); c.width = 480; c.height = 640;
+    c.getContext('2d').drawImage(im, (480 - im.width * k) / 2, (640 - im.height * k) / 2, im.width * k, im.height * k);
+    await folder.writeFile(id + '-bg.jpg', c.toDataURL('image/jpeg', .8).split(',')[1]); bg = true;
+  } catch {}
+  const diffs = [];
+  for (const m of sets) {
+    const k = diffs.length, f = id + '-' + k + '.json', real = m.notes.filter(n => !n.mine);
+    await folder.writeFile(f, await rhB64(new TextEncoder().encode(JSON.stringify({K: m.K, beat0: m.beat0, beat: m.beat, notes: m.notes.map(n => [Math.round(n.t * 1000) / 1000, n.lane, Math.round(n.len * 1000) / 1000, n.mine ? 1 : 0])}))));
+    diffs.push({v: m.version, f, K: m.K, n: real.length, len: Math.round(real.at(-1).t), msd: rhSkills(real).overall});
+  }
+  diffs.sort((a, b) => a.K - b.K || a.msd - b.msd);
+  const L = rhCharts(), e = {id, name: (m0.artist ? m0.artist + ' - ' : '') + m0.title, src: m0.src, audio: id + '-audio.' + ext, bg, diffs, d: Date.now()};
+  const old = L.findIndex(x => x.id === id); if (old >= 0) L[old] = e; else L.push(e);
+  rhChartCache.delete(id); saveGames(); rhList();
+  msg('« ' + e.name + ' » (' + e.src + ') : ' + diffs.length + ' difficulté' + (diffs.length > 1 ? 's' : '') + ' importée' + (diffs.length > 1 ? 's' : '') + '.');
+  await rhSelect(id, 'C0');
+}
+async function rhChartDrop(id, keepEntry) {
+  const L = rhCharts(), s = L.find(x => x.id === id); rhChartCache.delete(id);
+  try { for (const n of await folder.listFiles()) if (n.startsWith(id + '-')) await folder.removeFile(n); } catch {}
+  if (s && !keepEntry) { L.splice(L.indexOf(s), 1); saveGames(); }
+}
+const rhChartCache = new Map();
+async function rhChartLoad(id, diff) {
+  const s = rhCharts().find(x => x.id === id), d = s && (s.diffs[+String(diff).slice(1)] || s.diffs[0]); if (!d) throw new Error('map introuvable');
+  let C = rhChartCache.get(id);
+  if (!C) {
+    rhAudio(); toast('Chargement de la map…'); C = {buffer: await rhCtx.decodeAudioData(await rhFileBytes(s.audio)), bg: null};
+    if (s.bg) try { C.bg = await createImageBitmap(new Blob([await rhFileBytes(id + '-bg.jpg')])); } catch {}
+    if (rhChartCache.size > 1) rhChartCache.delete(rhChartCache.keys().next().value); rhChartCache.set(id, C);
+  }
+  const j = JSON.parse(new TextDecoder().decode(await rhFileBytes(d.f)));
+  return {K: j.K, beat0: j.beat0, beat: j.beat, buffer: C.buffer, bg: C.bg, name: s.name + ' [' + d.v + ']', key: 'rhc' + id + '|' + d.v,
+    notes: j.notes.map(([t, lane, len, mine]) => ({t, lane, len, judged: false, held: false, ...(mine ? {mine: true} : {})}))};
+}
+let rhTok = 0;
+// i : numéro d'un morceau du jeu, identifiant d'une musique importée, d'une map importée (« c… ») ou d'un exercice (« ex:… »)
+// o : {over (réglages imposés : défi du jour), daily, course (parcours de dans), section (boucle d'entraînement), auto (partir tout seul)}
+async function rhSelect(i, diff, o) { const me = rhTok + 1; rhBar(.03); try { return await rhPrepare(i, diff, o); } finally { if (me === rhTok) rhBar(null); } }
+const RP = () => gstore('rhythmPrefs', {});
+async function rhPrepare(i, diff, o = {}) {
+  let info, c, notes, b0 = 0, beat = .5, bg = null; const tok = ++rhTok, ov = o.over || {}, opt = (k, id) => ov[k] ?? +$(id).value;
+  if (rh) { try { rh.src?.stop(); } catch {} rh.mode = 'load'; }  // la musique entière doit être prête avant de pouvoir lancer
+  const rate = o.section ? o.section.rate : o.course ? RH_DAN(o.course.d).rate : opt('rate', 'rhRate'), od = opt('od', 'rhOD'), hold = opt('hold', 'rhHold'), mineOn = opt('mine', 'rhMine');
+  let K = opt('K', 'rhK');
+  if (typeof i === 'number') {
+    const song = RH_SONGS[i] || RH_SONGS[0], si = RH_SONGS.indexOf(song); i = si; c = rhCompose(song); notes = rhChart(c, diff, K); info = {name: song.name, bpm: song.bpm, key: 'rh' + si + diff};
+    const buffer = await rhRenderSong(si, c); beat = c.step * 4; c = {events: [], lead: [], len: c.len, step: c.step, buffer};
+  } else if (String(i).startsWith('ex:')) {
+    const [, sk, bpm, min] = i.split(':'), e = rhExercise(sk, +bpm, +min, K); notes = e.notes; info = {name: (RH_EX[sk] || sk) + ' · ' + bpm + ' BPM', bpm: +bpm, key: 'rhe' + sk + bpm + 'x' + min, ex: true};
+    const buffer = await rhRenderSong(i, e.c); b0 = 2; beat = e.c.step * 4; c = {events: [], lead: [], len: e.c.len, step: e.c.step, buffer};
+  } else if (rhCharts().some(x => x.id === i)) {
+    const m = await rhChartLoad(i, diff); K = m.K; notes = m.notes; info = {name: m.name, bpm: Math.round(60 / m.beat), key: m.key, chart: true}; b0 = m.beat0; beat = m.beat; bg = m.bg;
+    c = {events: [], lead: [], len: Math.min(m.buffer.duration, Math.max(...notes.map(n => n.t + n.len)) + 1.5), step: m.beat / 4, buffer: m.buffer};
+  } else {
+    const imp = rhImports().find(x => x.id === i); if (!imp) return rhSelect(0, 'normal');
+    const {a, buffer} = await rhLoadImport(imp);
+    c = {events: [], lead: [], len: a.len, step: a.beat / 4, buffer}; notes = rhChartImport(a, diff, K); info = {name: imp.name, bpm: a.bpm, key: 'rhx' + imp.id + diff}; b0 = a.beat0; beat = a.beat;
+  }
+  if (!info.chart && K !== 4) info.key += '@' + K + 'k';
+  if (rate !== 1) info.key += '@x' + rate;
+  if (o.daily) info.key = 'rhd' + o.daily;
+  for (const n of notes) n.snap = rhSnap(n.t, b0, beat);
+  if (!mineOn) notes = notes.filter(n => !n.mine); else if (!notes.some(n => n.mine)) notes = rhMines(notes, K, info.key);  // les mines d'une map StepMania aussi, seulement avec le réglage
+  if (o.section) notes = notes.filter(n => n.t >= o.section.a && n.t <= o.section.b);
+  notes.sort((a, b) => a.t - b.t);  // triées : chaque image ne parcourt que les notes proches (rh.ni)
+  let buffer = c.buffer;
+  if (buffer && rate !== 1) { toast('Taux ×' + String(rate).replace('.', ',') + ' : la musique se prépare…'); await new Promise(r => setTimeout(r, 30)); buffer = rhStretch(String(i), buffer, rate); }
   if (tok !== rhTok) return;  // un autre niveau a été choisi entre-temps
-  const stars = /^S\d+$/.test(diff) ? +diff.slice(1) : Math.max(1, Math.min(10, Math.round(notes.length / Math.max(30, c.len) * 1.25) + (diff === 'expert' ? 1 : 0)));  // la vitesse des notes dépend du niveau : rapide jusqu'à 2★, très rapide au-delà
+  const real = notes.filter(n => !n.mine), skills = rhSkills(real, rate);
+  const stars = /^S\d+$/.test(diff) ? +diff.slice(1) : Math.max(1, Math.min(10, Math.round(real.length / Math.max(30, c.len) * 1.25) + (diff === 'expert' ? 1 : 0)));  // la vitesse des notes dépend du niveau : rapide jusqu'à 2★, très rapide au-delà
   try { rh?.src?.stop(); } catch {}
+  rhSetKeys(K);
   rh = rhHook(rh || {raf: 0});
-  Object.assign(rh, {g: $('rhCanvas').getContext('2d'), mode: 'ready', stars, speed: stars > 2 ? 3.2 : 2.6, tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, dts: [], hist: [], judge: null, flash: [0, 0, 0, 0], down: [false, false, false, false], sparks: [], done: false});
+  const sp = +$('rhSpd').value;
+  Object.assign(rh, {g: $('rhCanvas').getContext('2d'), mode: 'ready', stars, speed: sp ? 1.2 + sp * .32 : stars > 2 ? 3.2 : 2.6, tick: 0, song: i, diff, c: {...c, buffer}, info, notes, src: null, ev: 0, t0: 0, tStart: 0,
+    ni: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, tailC: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, dts: [], hist: [], hits: [], tails: [], mines: 0, judge: null,
+    K, L: rhLanes(K), rate, od, win: rhWinFor(od), hold: !!hold, mineOn: !!mineOn, over: o.over || null, daily: o.daily || 0, course: o.course || null, section: o.section || null,
+    life: o.course ? o.course.life : 100, failed: false, skills, b0, beat, bg, flash: Array(K).fill(0), down: Array(K).fill(false), sparks: [], done: false, adj: 0, record: false});
   $('rhCanvas').__rh = () => rh;  // pour le test « local »
-  games.rhythmLast = {song: i, diff}; rhList();
+  if (!o.course && !o.section && !o.daily) games.rhythmLast = {song: i, diff};
+  rhList(); $('rhAna').hidden = true;
   gameLoop(rh, 'neodex:rhythm', rhUpdate, rhDraw);
+  if (o.auto) rhBegin();
 }
 let rhOffMs = 0;
 const rhLatency = () => (rhCtx?.outputLatency || 0) + (rhCtx?.baseLatency || 0) + rhOffMs / 1000;
@@ -891,61 +1242,120 @@ function rhTime() {
   rhCk.out = v < rhCk.out && rhCk.out - v < .06 ? rhCk.out : v;  // un paquet arrivé un peu tôt ne fait pas reculer les notes
   return rhCk.out;
 }
-const rhNow = () => rhTime() - rh.t0 - rhLatency();
+const rhNow = () => (rhTime() - rh.t0 - rhLatency()) * rh.rate;  // le temps du morceau (le taux le fait avancer plus ou moins vite)
 function rhBegin() {
   if (!document.fullscreenElement) $('rhCanvas').parentElement.requestFullscreen?.().catch(() => {});  // plein écran : passe aussi par-dessus la barre de NeoDex
-  rhAudio(); rhCtx.resume(); rh.t0 = rhCtx.currentTime + 4; rhCount(); rh.ev = 0; rh.mode = 'play';
-  if (rh.c.buffer) { try { rh.src?.stop(); } catch {} rh.src = rhCtx.createBufferSource(); rh.src.buffer = rh.c.buffer; rh.src.connect(rhOut); rh.src.start(rh.t0); }  // your own music, in time with the notes
+  rhAudio(); rhCtx.resume();
+  const lead = rh.section || rh.course?.k ? 2 : 4, sa = rh.section ? Math.max(0, rh.section.a - 1.5) : 0, when = rhCtx.currentTime + lead;
+  rh.tStart = when; rh.t0 = when - sa / rh.rate; rhCount(); rh.ev = 0; rh.mode = 'play';
+  if (rh.c.buffer) { try { rh.src?.stop(); } catch {} rh.src = rhCtx.createBufferSource(); rh.src.buffer = rh.c.buffer; rh.src.connect(rhOut); rh.src.start(when, sa / rh.rate); }
 }
 function rhPress() {
   if (!rh) return;
   if (rh.mode === 'ready') return rhBegin();
   if (rh.mode === 'pause') { rh.mode = 'play'; rhCtx.resume(); return; }
-  if (rh.mode === 'over') rhSelect(rh.song, rh.diff);
+  if (rh.mode === 'over') {
+    if (rh.course) return rhCourseStart(rh.course.d);
+    if (rh.section) return rhSelect(rh.song, rh.diff, {section: rh.section, over: rh.over, auto: true});
+    rhSelect(rh.song, rh.diff, {over: rh.over, daily: rh.daily});
+  }
 }
-function rhJudge(n, dt) {
-  const w = RH.WIN.find(w => Math.abs(dt) <= w[0]);
+function rhLife(d) { if (!rh.course || rh.mode !== 'play') return; rh.life = Math.max(0, rh.life + d); if (rh.life <= 0) rh.failed = true; }
+const rhSparks = (lane, col, n = 8) => { const L = rh.L; for (let i = 0; i < n; i++) rh.sparks.push({x: L.X0 + lane * L.LW + L.LW / 2, y: RH.HIT, vx: (Math.random() - .5) * 3, vy: -Math.random() * 3, life: 18, color: col}); };
+function rhJudge(n, dt) {  // dt : l'écart en vraies secondes (le taux n'élargit pas les fenêtres)
+  const w = rh.win.find(w => Math.abs(dt) <= w[0]);
   n.judged = true;
   if (!w) return rhMiss(n);
-  rh.hist.push([n.t, {PARFAIT: 3, BIEN: 2, OK: 1}[w[1]] || 1]); rh.dts.push(dt); rh.combo++; rh.maxCombo = Math.max(rh.maxCombo, rh.combo); rh.counts[w[1]]++;
+  rh.hist.push([n.t, {PARFAIT: 3, BIEN: 2, OK: 1}[w[1]] || 1]); rh.dts.push(dt); rh.hits.push([n.t, n.lane, dt]); rh.combo++; rh.maxCombo = Math.max(rh.maxCombo, rh.combo); rh.counts[w[1]]++;
   rh.score += Math.round(w[2] * (1 + Math.min(rh.combo, 100) / 100));
   rh.judge = {text: w[1], color: w[3], t: 30, dt};
-  for (let i = 0; i < 8; i++) rh.sparks.push({x: RH.X0 + n.lane * RH.LW + RH.LW / 2, y: RH.HIT, vx: (Math.random() - .5) * 3, vy: -Math.random() * 3, life: 18, color: RH.COLORS[n.lane]});
+  if (w[1] === 'OK') rhLife(-1); else if (w[1] === 'BIEN') rhLife(-.3);
+  rhSparks(n.lane, rh.L.cols[n.lane]);
   if (n.len) n.held = true;
 }
-function rhMiss(n) { rh.hist.push([n.t, 0]); n.judged = true; n.missed = true; rh.combo = 0; rh.counts['RATÉ']++; rh.judge = {text: 'RATÉ', color: '#ff4f6d', t: 30}; }
+function rhMiss(n) { rh.hist.push([n.t, 0]); rh.hits.push([n.t, n.lane, null]); n.judged = true; n.missed = true; rh.combo = 0; rh.counts['RATÉ']++; rh.judge = {text: 'RATÉ', color: '#ff4f6d', t: 30}; rhLife(-RH_DAN(rh.course?.d || 1).drain); }
+function rhBoom(n) { rh.mines++; rh.combo = 0; rh.score = Math.max(0, rh.score - 200); rh.judge = {text: 'MINE', color: '#ff4f6d', t: 30}; rhSparks(n.lane, '#ff4f6d', 14); rhPlayKit(10, .5); rhLife(-RH_DAN(rh.course?.d || 1).drain / 2); }
+function rhTail(n, dt) {  // la fin d'une note longue (réglage « début et fin ») : jugée comme une note ; lâchée trop tôt, elle casse le combo
+  const w = dt == null ? rh.win[2] : rh.win.find(w => Math.abs(dt) <= w[0]); n.tail = true;
+  if (!w) { n.broken = true; rh.combo = 0; rh.tailC['RATÉ']++; rh.judge = {text: 'LÂCHÉ', color: '#ff4f6d', t: 30}; rhLife(-RH_DAN(rh.course?.d || 1).drain / 2); return; }
+  rh.tailC[w[1]]++; rh.score += Math.round(w[2] / 2); if (dt != null) rh.tails.push(dt); rh.judge = {text: w[1], color: w[3], t: 30, dt: dt ?? undefined};
+}
 function rhKey(lane, down) {
-  if (!rh || rh.mode !== 'play') return;
+  if (!rh || rh.mode !== 'play' || lane >= rh.K) return;
   rh.down[lane] = down;
-  const now = rhNow();
+  const now = rhNow(), R = rh.rate;
   if (down) {
     rh.flash[lane] = 8;
-    const n = rh.notes.find(n => !n.judged && n.lane === lane && Math.abs(n.t - now) <= RH.WIN.at(-1)[0]);
-    if (n) rhJudge(n, now - n.t);
+    const n = rh.notes.find(n => !n.judged && !n.mine && n.lane === lane && Math.abs(n.t - now) <= rh.win.at(-1)[0] * R);
+    if (n) rhJudge(n, (now - n.t) / R);
   } else {
     const n = rh.notes.find(n => n.held && n.lane === lane);
-    if (n) { n.held = false; if (now < n.t + n.len - .12) { n.broken = true; rh.combo = 0; rh.judge = {text: 'LÂCHÉ', color: '#ff4f6d', t: 30}; } else { n.tail = true; rh.score += 150; } }
+    if (!n) return;
+    n.held = false;
+    if (rh.hold) rhTail(n, (now - n.t - n.len) / R);
+    else if (now < n.t + n.len - .12 * R) { n.broken = true; rh.combo = 0; rh.judge = {text: 'LÂCHÉ', color: '#ff4f6d', t: 30}; rhLife(-RH_DAN(rh.course?.d || 1).drain / 2); } else { n.tail = true; rh.score += 150; }
   }
 }
 function rhUpdate() {
-  const now = rhNow(), ahead = rhCtx.currentTime + .15;
-  while (rh.ev < rh.c.events.length && rh.t0 + rh.c.events[rh.ev].t < ahead) { const e = rh.c.events[rh.ev++], when = rh.t0 + e.t; if (when >= rhCtx.currentTime - .02) rhSound(e, Math.max(when, rhCtx.currentTime)); }
-  for (const n of rh.notes) {
-    if (!n.judged && now - n.t > RH.WIN.at(-1)[0]) rhMiss(n);
-    if (n.held && now >= n.t + n.len) { n.held = false; n.tail = true; rh.score += 150; }
+  const now = rhNow(), late = rh.win.at(-1)[0] * rh.rate, N = rh.notes;
+  while (rh.ni < N.length && N[rh.ni].t + N[rh.ni].len < now - 3) rh.ni++;  // les notes passées depuis longtemps ne sont plus regardées
+  for (let i = rh.ni; i < N.length; i++) {
+    const n = N[i]; if (n.t > now + 1) break;
+    if (n.mine) { if (!n.judged && now >= n.t) { n.judged = true; if (rh.down[n.lane]) rhBoom(n); } continue; }  // une mine explose si sa touche est tenue quand elle passe
+    if (!n.judged && now - n.t > late) rhMiss(n);
+    if (n.held) { if (rh.hold) { if (now > n.t + n.len + late) { n.held = false; rhTail(n, null); } } else if (now >= n.t + n.len) { n.held = false; n.tail = true; rh.score += 150; } }
   }
-  for (let i = 0; i < 4; i++) if (rh.flash[i]) rh.flash[i]--;
+  for (let i = 0; i < rh.K; i++) if (rh.flash[i]) rh.flash[i]--;
   for (const s of rh.sparks) { s.x += s.vx; s.y += s.vy; s.vy += .15; s.life--; } rh.sparks = rh.sparks.filter(s => s.life > 0);
   if (rh.judge && --rh.judge.t <= 0) rh.judge = null;
-  if (now > rh.c.len + 1.5) {
-    rh.mode = 'over'; try { rh.src?.stop(); } catch {} try { if (document.fullscreenElement) document.exitFullscreen(); } catch {}
-    const n = rh.notes.length, acc = n ? (rh.counts.PARFAIT * 300 + rh.counts.BIEN * 200 + rh.counts.OK * 100) / (n * 300) : 0;
-    rh.acc = acc; rh.grade = acc >= .95 ? 'S' : acc >= .9 ? 'A' : acc >= .8 ? 'B' : acc >= .7 ? 'C' : 'D';
-    const k = rh.info.key, res = gstore('rhythm', {}); rh.record = best(k, rh.score);
-    if (rh.record || !res[k]) res[k] = {score: rh.score, acc: Math.round(acc * 1000) / 10, grade: rh.grade, combo: rh.maxCombo};
-    rh.adj = rhAutoOffset(rh.dts);
-    saveGames(); sfx('SAB'.includes(rh.grade) ? 'launch' : 'notify'); rhList();
+  if (rh.failed || now > (rh.section ? rh.section.b + .8 : rh.c.len + 1.5)) rhFinish();
+}
+const rhDtStats = d => { if (d.length < 2) return {mean: 0, sd: 0}; const m = d.reduce((x, y) => x + y, 0) / d.length; return {mean: Math.round(m * 1000), sd: Math.round(Math.sqrt(d.reduce((s, x) => s + (x - m) ** 2, 0) / d.length) * 1000)}; };
+console.assert(rhDtStats([.01, -.01, .01, -.01]).sd === 10 && rhDtStats([.02, .02]).mean === 20, 'rhDtStats');
+function rhFinish() {
+  rh.mode = 'over'; try { rh.src?.stop(); } catch {}
+  const real = rh.notes.filter(n => !n.mine), T = rh.tailC, C = rh.counts, holds = rh.hold ? real.filter(n => n.len).length : 0, tot = real.length + holds;
+  const acc = tot ? (C.PARFAIT * 300 + C.BIEN * 200 + C.OK * 100 + T.PARFAIT * 300 + T.BIEN * 200 + T.OK * 100) / (tot * 300) : 0;
+  rh.acc = acc; rh.grade = acc >= .95 ? 'S' : acc >= .9 ? 'A' : acc >= .8 ? 'B' : acc >= .7 ? 'C' : 'D'; rh.stats = rhDtStats(rh.dts.concat(rh.tails));
+  if (rh.section) return rhSectionEnd(acc);
+  if (rh.course) return rhCourseEnd(acc);
+  try { if (document.fullscreenElement) document.exitFullscreen(); } catch {}
+  const k = rh.info.key, res = gstore('rhythm', {}); rh.record = best(k, rh.score);
+  if (rh.record || !res[k]) res[k] = {score: rh.score, acc: Math.round(acc * 1000) / 10, grade: rh.grade, combo: rh.maxCombo};
+  if (real.length >= 30) rhPlayAdd(k, rh.skills, acc);
+  if (rh.daily) { const D = (games.rhDaily ??= {}), p = D[rh.daily]; if ('SABC'.includes(rh.grade) && (!p || acc * 100 > p.acc)) D[rh.daily] = {g: rh.grade, acc: Math.round(acc * 1000) / 10}; for (const d of Object.keys(D).sort().slice(0, -60)) delete D[d]; }
+  rh.adj = rhAutoOffset(rh.dts);
+  saveGames(); sfx('SAB'.includes(rh.grade) ? 'launch' : 'notify'); rhList(); rhAnaShow();
+}
+// la boucle d'entraînement : le passage tourne au ralenti ; à 93 % ou plus, il repart 5 % plus vite
+function rhSectionStart(a, b) {
+  if (!rh) return; const S = {a: Math.max(0, a), b, rate: Math.max(.5, Math.round(((rh.rate || 1) - .25) * 20) / 20), wins: 0, n: 0};
+  toast('Ce passage tourne en boucle au ralenti, et accélère de 5 % à chaque réussite (93 % ou plus). Échap : arrêter.');
+  rhSelect(rh.song, rh.diff, {section: S, over: rh.over, auto: true});
+}
+function rhSectionStop() { if (rh?.section) { try { if (document.fullscreenElement) document.exitFullscreen(); } catch {} rhSelect(rh.song, rh.diff, {over: rh.over}); } }
+function rhSectionEnd(acc) {
+  const S = rh.section, ok = acc >= .93; S.n++;
+  if (ok) { S.wins++; S.rate = Math.min(2, Math.round((S.rate + .05) * 100) / 100); }
+  rh.msg = ok ? 'RÉUSSI ! ENSUITE ×' + S.rate.toFixed(2) : 'ENCORE UNE FOIS · ' + Math.round(acc * 100) + ' %';
+  setTimeout(() => { if (rh?.section === S && rh.mode === 'over') rhSelect(rh.song, rh.diff, {section: S, over: rh.over, auto: true}); }, 1600);
+}
+function rhCourseStart(d) {
+  const list = rhDanSongs(d); toast(rhDanName(d) + ' : ' + list.map(s => RH_SONGS[s.i].name).join(', '));
+  rhSelect(list[0].i, list[0].diff, {course: {d, list, k: 0, life: 100, accs: []}});
+}
+function rhCourseEnd(acc) {
+  const C = rh.course; C.accs.push(acc); C.life = rh.life;
+  const out = () => { try { if (document.fullscreenElement) document.exitFullscreen(); } catch {} };
+  if (rh.failed) { rh.msg = 'ÉCHEC AU ' + rhDanName(C.d).toUpperCase(); out(); sfx('notify'); rhList(); return; }
+  if (C.k < C.list.length - 1) {
+    rh.msg = 'MORCEAU SUIVANT…'; const nx = {...C, k: C.k + 1, accs: C.accs.slice()};
+    setTimeout(() => { if (rh?.course === C) { const s = nx.list[nx.k]; rhSelect(s.i, s.diff, {course: nx, auto: true}); } }, 1800);
+    return;
   }
+  const avg = C.accs.reduce((x, y) => x + y, 0) / C.accs.length, D = (games.rhDans ??= {});
+  if (!D[C.d] || avg * 100 > D[C.d].acc) D[C.d] = {acc: Math.round(avg * 1000) / 10, life: Math.round(rh.life)};
+  rh.msg = rhDanName(C.d).toUpperCase() + ' RÉUSSI !'; rh.acc = avg; out(); saveGames(); sfx('launch'); rhList();
 }
 // décalage automatique : si tu tapes en moyenne en retard (ou en avance) sur une partie, on corrige de 70 % de l'écart
 function rhOffsetStep(dts) {
@@ -961,6 +1371,23 @@ function rhAutoOffset(dts) {
   return d;
 }
 function rhGem(g, x, y, c, w = 32) { px(g, '#05010b', x - 1, y - 4, w + 2, 9); px(g, c, x, y - 3, w, 7); px(g, 'rgba(255,255,255,.6)', x + 2, y - 3, w - 4, 2); px(g, 'rgba(5,1,11,.3)', x, y + 2, w, 2); }
+// les autres formes de notes (flèches dans le sens de la voie, ronds) et la mine, dessinées une fois puis recopiées
+const rhSprC = new Map();
+function rhSpr(kind, col, w) {
+  const k = kind + col + w; let c = rhSprC.get(k); if (c) return c;
+  const s = Math.max(7, Math.min(13, w - 2)) | 1, m = s >> 1, on = (u, v) => kind === 'C' ? (u - m) ** 2 + (v - m) ** 2 <= m * m + m * .6 : kind === 'M' ? Math.abs(u - m) + Math.abs(v - m) <= m : v <= m ? Math.abs(u - m) <= v : Math.abs(u - m) <= Math.max(1, s / 6);
+  const at = (u, v) => kind === 'D' ? [u, s - 1 - v] : kind === 'L' ? [v, u] : kind === 'R' ? [s - 1 - v, u] : [u, v];
+  c = document.createElement('canvas'); c.width = c.height = s + 2; const g = c.getContext('2d');
+  for (const [pass, f] of [[0, '#05010b'], [1, col]]) for (let v = 0; v < s; v++) for (let u = 0; u < s; u++) if (on(u, v)) { const [x, y] = at(u, v); g.fillStyle = f; if (pass) g.fillRect(x + 1, y + 1, 1, 1); else g.fillRect(x, y, 3, 3); }
+  if (kind === 'M') { g.fillStyle = '#05010b'; g.fillRect(m, m, 3, 3); g.fillStyle = '#ffffff'; g.fillRect(m + 1, m - 1, 1, 1); }
+  else { g.fillStyle = 'rgba(255,255,255,.55)'; const [x, y] = at(m, kind === 'C' ? 2 : m - 1); g.fillRect(x + 1, y + 1, 1, 1); }
+  rhSprC.set(k, c); return c;
+}
+const RH_DIRS = {4: 'LDUR', 5: 'LDCUR', 6: 'LDURDU', 7: 'LDUCDUR'};
+function rhNote(g, x, y, col, w, lane, sk) {
+  if (!sk) return rhGem(g, x, y, col, w);
+  const kind = sk === 2 ? 'C' : RH_DIRS[rh.K][lane] || 'U', c = rhSpr(kind, col, w); g.drawImage(c, Math.round(x + (w - c.width) / 2), Math.round(y - c.height / 2));
+}
 // la courbe de précision de l'écran de fin : la justesse le long du morceau (24 tranches ; 100 % = tout en PARFAIT), les notes ratées en rouge dessous
 function rhCurveData(hist, len, N = 24) {
   const b = Array.from({length: N}, () => [0, 0]);
@@ -982,56 +1409,126 @@ function rhCurve(g, W, y) {
   });
   for (const [t, s] of rh.hist || []) if (!s) px(g, '#ff4f6d', x0 + Math.round(Math.min(1, t / len) * (w - 1)), y + h + 8, 1, 3);
 }
+const rhMs = v => (v > 0 ? '+' : '') + v + ' ms';
 function rhDraw() {
-  const g = rh.g, {W, H, HIT, LW, X0} = RH, now = rhCtx && rh.mode !== 'ready' && rh.mode !== 'load' ? rhNow() : -2, speed = rh.speed * 90;
-  const beat = 60 / rh.info.bpm, pulse = now > 0 ? Math.max(0, 1 - (now % beat) / beat * 2) : 0;
+  const g = rh.g, {W, H, HIT} = RH, {K, LW, X0, cols} = rh.L, now = rhCtx && rh.mode !== 'ready' && rh.mode !== 'load' ? rhNow() : -2, speed = rh.speed * 90 / rh.rate, clean = +$('rhClean').value;
+  const beat = rh.beat || 60 / rh.info.bpm, pulse = now > 0 ? Math.max(0, 1 - (((now - rh.b0) % beat) + beat) % beat / beat * 2) : 0, pad = LW >= 32 ? 4 : 2, nw = LW - 2 * pad;
   g.fillStyle = '#07021a'; g.fillRect(0, 0, W, H);
-  for (let i = 0; i < 4; i++) {
+  if (rh.bg) { g.globalAlpha = .2; g.drawImage(rh.bg, 0, 0, W, H); g.globalAlpha = 1; }  // le fond d'une map importée, très assombri
+  if (+$('rhBg').value && rhAn && rh.mode === 'play') {  // le visualiseur : les fréquences de la musique en barres, derrière les voies
+    const d = rhAnData ??= new Uint8Array(rhAn.frequencyBinCount); rhAn.getByteFrequencyData(d);
+    for (let i = 0, n = 20, bw = W / n; i < n; i++) { const h = Math.round(d[Math.floor(i * d.length * .7 / n)] / 255 * H * .55); px(g, i % 2 ? '#1d0d3c' : '#24104c', i * bw, H - h, bw - 1, h); }
+  }
+  for (let i = 0; i < K; i++) {
     const x = X0 + i * LW;
-    px(g, i % 2 ? '#0d0526' : '#100830', x, 0, LW, H);
-    if (rh.flash[i] || rh.down[i]) { g.fillStyle = RH.COLORS[i] + (rh.down[i] ? '30' : '18'); g.fillRect(x, 0, LW, HIT + 10); }
+    g.fillStyle = i % 2 ? 'rgba(13,5,38,.85)' : 'rgba(16,8,48,.85)'; g.fillRect(x, 0, LW, H);
+    if (rh.flash[i] || rh.down[i]) { g.fillStyle = cols[i] + (rh.down[i] ? '30' : '18'); g.fillRect(x, 0, LW, HIT + 10); }
     px(g, '#2a1d52', x, 0, 1, H);
   }
-  px(g, '#2a1d52', X0 + 4 * LW, 0, 1, H);
-  g.fillStyle = `rgba(255,90,217,${.08 + pulse * .25})`; g.fillRect(0, 0, X0 - 2, H); g.fillRect(X0 + 4 * LW + 2, 0, W, H);
-  const b0 = rh.c.buffer ? rhAnalysed.get(rh.song)?.a.beat0 || 0 : 0;  // imported music: the grid follows its own beats
-  for (let k = Math.ceil((now - b0) / beat); k * beat + b0 < now + HIT / speed; k++) { const y = HIT - (k * beat + b0 - now) * speed; px(g, k % 4 ? '#1c1238' : '#2b2468', X0, y, LW * 4, 1); }
-  for (const n of rh.notes) {
+  px(g, '#2a1d52', X0 + K * LW, 0, 1, H);
+  g.fillStyle = `rgba(255,90,217,${.08 + pulse * .25})`; g.fillRect(0, 0, X0 - 2, H); g.fillRect(X0 + K * LW + 2, 0, W, H);
+  for (let k = Math.ceil((now - rh.b0) / beat); k * beat + rh.b0 < now + HIT / speed; k++) { const y = HIT - (k * beat + rh.b0 - now) * speed; px(g, k % 4 ? '#1c1238' : '#2b2468', X0, y, LW * K, 1); }
+  const snap = +$('rhSnap').value, skin = +$('rhSkin').value, N = rh.notes, top = now + (HIT + 20) / speed;
+  for (let i = rh.ni; i < N.length; i++) {
+    const n = N[i]; if (n.t > top) break;
+    const y = HIT - (n.t - now) * speed, x = X0 + n.lane * LW + pad;
+    if (n.mine) { if (!n.judged && y > -10 && y < H + 10) { const c = rhSpr('M', '#ff4f6d', nw); g.drawImage(c, Math.round(x + (nw - c.width) / 2), Math.round(y - c.height / 2)); } continue; }
     if (n.judged && !n.len && !n.missed) continue;
-    const y = HIT - (n.t - now) * speed, x = X0 + n.lane * LW + 4;
+    const col = n.missed ? '#3a2a6e' : snap && n.snap ? n.snap : cols[n.lane];
     if (n.len) {
-      const y2 = HIT - (n.t + n.len - now) * speed; if (y2 > H || (n.tail)) continue;
-      const top = Math.max(0, y2), bot = n.held ? HIT : Math.min(H, y);
-      if (bot > top) { px(g, n.broken || n.missed ? '#3a2a6e' : RH.COLORS[n.lane] + '88', x + 10, top, 12, bot - top); px(g, 'rgba(255,255,255,.35)', x + 12, top, 2, bot - top); }
+      const y2 = HIT - (n.t + n.len - now) * speed; if (y2 > H || n.tail) continue;
+      const top = Math.max(0, y2), bot = n.held ? HIT : Math.min(H, y), bw = Math.max(6, Math.round(nw * .38));
+      if (bot > top) { px(g, n.broken || n.missed ? '#3a2a6e' : cols[n.lane] + '88', x + (nw - bw) / 2, top, bw, bot - top); px(g, 'rgba(255,255,255,.35)', x + (nw - bw) / 2 + 2, top, 2, bot - top); }
+      if (rh.hold && !n.broken && y2 > -10) px(g, n.missed ? '#3a2a6e' : '#ffffff', x + (nw - bw) / 2 - 1, Math.round(y2), bw + 2, 2);  // la fin, à relâcher au bon moment
       if (n.judged && !n.missed) continue;
     }
     if (y < -10 || y > H + 10) continue;
-    rhGem(g, x, Math.round(y), n.missed ? '#3a2a6e' : RH.COLORS[n.lane]);
+    rhNote(g, x, Math.round(y), col, nw, n.lane, skin);
   }
-  for (let i = 0; i < 4; i++) {
-    const x = X0 + i * LW + 4, on = rh.down[i];
-    px(g, '#05010b', x - 1, HIT - 5, 34, 11); px(g, on ? RH.COLORS[i] : '#2b2468', x, HIT - 4, 32, 9); px(g, on ? '#ffffff' : RH.COLORS[i], x + 2, HIT - 4, 28, 1);
-    pxFont(g, RH.KEYS[i][0].toUpperCase(), x + 16, HIT + 24, on ? '#ffffff' : '#8f7bb8', 8, 'center');
+  for (let i = 0; i < K; i++) {
+    const x = X0 + i * LW + pad, on = rh.down[i];
+    px(g, '#05010b', x - 1, HIT - 5, nw + 2, 11); px(g, on ? cols[i] : '#2b2468', x, HIT - 4, nw, 9); px(g, on ? '#ffffff' : cols[i], x + 2, HIT - 4, nw - 4, 1);
+    if (!clean) pxFont(g, KEY_NAME(RH.KEYS[i][0]), x + nw / 2, HIT + 24, on ? '#ffffff' : '#8f7bb8', K > 5 ? 6 : 8, 'center');
   }
   for (const s of rh.sparks) px(g, s.color, s.x, s.y, 2, 2);
-  px(g, 'rgba(11,3,28,.85)', 0, 0, W, 16);
-  pxFont(g, String(rh.score).padStart(7, '0'), 4, 11, '#ffffff', 7);
   const title = rh.info.name.length > 22 ? rh.info.name.slice(0, 21) + '…' : rh.info.name;
-  pxFont(g, title, W - 4, 11, '#d9c6ff', 6, 'right');
-  px(g, '#2a1d52', 0, 16, W, 2); px(g, '#ff5ad9', 0, 16, Math.max(0, Math.min(1, now / rh.c.len)) * W, 2);
-  if (rh.combo >= 5) pxFont(g, rh.combo + ' COMBO', W / 2, 120, '#ffffff', 10, 'center');
-  if (rh.judge) pxFont(g, rh.judge.text, W / 2, 150 - (30 - rh.judge.t) / 3, rh.judge.color, 9, 'center');
-  if (rh.mode === 'ready') gameText(g, W, [[title.toUpperCase(), '#ff5ad9', 8], [(RH_DIFFS[rh.diff] || 'Perso') + ' · ' + rh.stars + '★ · ' + rh.notes.length + ' notes', '#d9c6ff'], ['Espace ou clic : jouer', '#ffd07a'], ['Touches D F J K', '#8f7bb8']], 150);
+  if (!clean) {  // l'écran épuré ne garde que les notes et le jugement
+    px(g, 'rgba(11,3,28,.85)', 0, 0, W, 16);
+    pxFont(g, String(rh.score).padStart(7, '0'), 4, 11, '#ffffff', 7);
+    pxFont(g, title, W - 4, 11, '#d9c6ff', 6, 'right');
+    px(g, '#2a1d52', 0, 16, W, 2); px(g, '#ff5ad9', 0, 16, Math.max(0, Math.min(1, now / rh.c.len)) * W, 2);
+    if (rh.combo >= 5) pxFont(g, rh.combo + ' COMBO', W / 2, 120, '#ffffff', 10, 'center');
+    if (rh.section) pxFont(g, 'BOUCLE ×' + rh.rate.toFixed(2) + ' · ' + rh.section.wins + ' RÉUSSIE' + (rh.section.wins > 1 ? 'S' : ''), W / 2, 30, '#7fe0ee', 5, 'center');
+    else if (rh.rate !== 1) pxFont(g, '×' + rh.rate.toFixed(2), 4, 30, '#7fe0ee', 5);
+  }
+  if (rh.course) {  // la vie du parcours de dans : une jauge à gauche, qui ne remonte jamais
+    const h = Math.round((H - 40) * rh.life / 100); px(g, '#05010b', 3, 22, 6, H - 36); px(g, rh.life > 30 ? '#8ee8a0' : '#ff4f6d', 4, 23 + (H - 40) - h, 4, h);
+    if (!clean) pxFont(g, (rh.course.k + 1) + '/' + rh.course.list.length, W - 4, 30, '#ffd07a', 5, 'right');
+  }
+  if (rh.judge) { const y = 150 - (30 - rh.judge.t) / 3; pxFont(g, rh.judge.text, W / 2, y, rh.judge.color, 9, 'center'); if (rh.judge.dt != null && Math.abs(rh.judge.dt) < 1) pxFont(g, rhMs(Math.round(rh.judge.dt * 1000)), W / 2, y + 11, '#8f7bb8', 5, 'center'); }
+  if (rh.mode === 'ready') {
+    const sub = [(RH_DIFFS[rh.diff] || (rh.info.ex ? 'Exercice' : 'Perso')) + ' · ' + rh.stars + '★ · ' + rh.notes.filter(n => !n.mine).length + ' notes', '#d9c6ff'];
+    const set = [K + ' voies', rh.rate !== 1 ? '×' + String(rh.rate).replace('.', ',') : '', rh.od !== 5 ? 'OD ' + rh.od : '', rh.mineOn ? 'mines' : '', rh.hold ? 'fins jugées' : ''].filter(Boolean).join(' · ');
+    const head = rh.course ? [[rhDanName(rh.course.d).toUpperCase() + ' · ' + (rh.course.k + 1) + '/4', '#ffd07a', 8]] : rh.daily ? [['DÉFI DU JOUR', '#ffd07a', 8]] : [];
+    gameText(g, W, [...head, [title.toUpperCase(), '#ff5ad9', 8], sub, [set, '#8f7bb8'], ['Difficulté ' + rh.skills.overall + ' · ' + rhSkillName(rhMainSkill(rh.skills)), '#7fe0ee'], ['Espace ou clic : jouer', '#ffd07a'], ['Touches ' + RH.KEYS.map(k => KEY_NAME(k[0])).join(' '), '#8f7bb8']], 140 - head.length * 14);
+  }
   if (rh.mode === 'load') gameText(g, W, [['CHARGEMENT…', '#ffd07a', 10], ['La musique se prépare', '#d9c6ff']], 160);
   if (rh.mode === 'pause') gameText(g, W, [['PAUSE', '#ffffff', 12], ['Espace : reprendre', '#d9c6ff']], 160);
-  if (rh.mode === 'over') gameText(g, W, [['NOTE ' + rh.grade, rh.grade === 'S' ? '#ffd07a' : '#ff5ad9', 14], [rh.score + ' points', '#ffffff'], ['Précision ' + (rh.acc * 100).toFixed(1) + ' %', '#d9c6ff'], ['Combo max ' + rh.maxCombo, '#d9c6ff'], ['P ' + rh.counts.PARFAIT + ' · B ' + rh.counts.BIEN + ' · OK ' + rh.counts.OK + ' · X ' + rh.counts['RATÉ'], '#8f7bb8'], [rh.record ? 'NOUVEAU RECORD !' : 'Espace : rejouer', '#ffd07a'], ...(rh.adj ? [['Décalage ajusté : ' + (rh.adj > 0 ? '+' : '') + rh.adj + ' ms', '#7ee07a']] : [])], 96);
-  if (rh.mode === 'over') rhCurve(g, W, 96 + (rh.adj ? 7 : 6) * 14 + 18);
+  if (rh.mode === 'over') {
+    const s = rh.stats || {mean: 0, sd: 0};
+    if (rh.section) return gameText(g, W, [['BOUCLE', '#7fe0ee', 12], [rh.msg || '', '#ffd07a'], ['Précision ' + (rh.acc * 100).toFixed(1) + ' %', '#d9c6ff'], ['Échap : arrêter la boucle', '#8f7bb8']], 130);
+    if (rh.course) return gameText(g, W, [[rh.msg || '', rh.failed ? '#ff4f6d' : '#ffd07a', 10], ['Précision ' + (rh.acc * 100).toFixed(1) + ' %', '#d9c6ff'], ['Vie ' + Math.round(rh.life) + ' %', '#d9c6ff'], ...(rh.msg === 'MORCEAU SUIVANT…' ? [] : [['Espace : recommencer le dan', '#8f7bb8']])], 130);
+    const L = [['NOTE ' + rh.grade, rh.grade === 'S' ? '#ffd07a' : '#ff5ad9', 14], [rh.score + ' points', '#ffffff'], ['Précision ' + (rh.acc * 100).toFixed(1) + ' %', '#d9c6ff'], ['Combo max ' + rh.maxCombo, '#d9c6ff'],
+      ['P ' + rh.counts.PARFAIT + ' · B ' + rh.counts.BIEN + ' · OK ' + rh.counts.OK + ' · X ' + rh.counts['RATÉ'] + (rh.mines ? ' · mines ' + rh.mines : ''), '#8f7bb8'], ['Moyenne ' + rhMs(s.mean) + ' · écart-type ' + s.sd + ' ms', '#8f7bb8'],
+      [rh.record ? 'NOUVEAU RECORD !' : rh.daily && 'SABC'.includes(rh.grade) ? 'DÉFI DU JOUR RÉUSSI !' : 'Espace : rejouer', '#ffd07a'], ...(rh.adj ? [['Décalage ajusté : ' + (rh.adj > 0 ? '+' : '') + rh.adj + ' ms', '#7ee07a']] : [])];
+    gameText(g, W, L, 90); rhCurve(g, W, 90 + L.length * 14 + 18);
+  }
 }
+// l'analyse d'après partie : tes frappes dans le temps, l'histogramme des écarts, le calage de chaque colonne, et les passages à retravailler
+function rhAnaShow() {
+  const box = $('rhAna'); if (!rh || rh.hits.length < 10) { box.hidden = true; return; } box.hidden = false;
+  const cv = $('rhAnaC'), g = cv.getContext('2d'), Wc = cv.width, Hc = cv.height, len = rh.c.len || 1, R = rh.win, lim = R.at(-1)[0], K = rh.K;
+  g.fillStyle = '#07021a'; g.fillRect(0, 0, Wc, Hc);
+  const x0 = 8, w0 = 296, yM = 62, hh = 40;
+  pxFont(g, 'TES FRAPPES (EN HAUT : EN RETARD)', x0, 12, '#8f7bb8', 5);
+  for (const f of [R[0][0], -R[0][0], R[1][0], -R[1][0]]) for (let x = x0; x < x0 + w0; x += 3) px(g, '#1c1238', x, Math.round(yM - f / lim * hh), 1, 1);
+  px(g, '#2b2468', x0, yM, w0, 1);
+  for (const [t, , dt] of rh.hits) {
+    const x = x0 + Math.round(Math.min(1, Math.max(0, (t - (rh.section?.a || 0)) / (rh.section ? rh.section.b - rh.section.a : len))) * (w0 - 1));
+    if (dt == null) { px(g, '#ff4f6d', x, yM + hh + 6, 1, 4); continue; }
+    const w = R.find(w => Math.abs(dt) <= w[0]); px(g, w ? w[3] : '#ff4f6d', x, Math.round(yM - Math.max(-1, Math.min(1, dt / lim)) * hh), 2, 2);
+  }
+  const hx = 316, bins = 30, H2 = new Array(bins).fill(0);
+  for (const [, , dt] of rh.hits) if (dt != null) H2[Math.max(0, Math.min(bins - 1, Math.floor((dt / lim + 1) / 2 * bins)))]++;
+  const mx = Math.max(1, ...H2); pxFont(g, 'ÉCARTS', hx, 12, '#8f7bb8', 5);
+  H2.forEach((v, i) => { const h = Math.round(v / mx * 70), mid = Math.abs(i + .5 - bins / 2) / (bins / 2) * lim; px(g, (R.find(w => mid <= w[0]) || R.at(-1))[3], hx + i * 5, 92 - h, 4, h); });
+  px(g, '#2b2468', hx, 93, bins * 5, 1); px(g, '#ffffff', hx + bins * 5 / 2, 90, 1, 5);
+  pxFont(g, '-' + Math.round(lim * 1000), hx, 104, '#5a4a8a', 5); pxFont(g, '+' + Math.round(lim * 1000), hx + bins * 5, 104, '#5a4a8a', 5, 'right'); pxFont(g, '0', hx + bins * 5 / 2, 104, '#5a4a8a', 5, 'center');
+  const col = Array.from({length: K}, () => []); for (const [, l, dt] of rh.hits) if (dt != null && l < K) col[l].push(dt);
+  const avg = d => d.length ? d.reduce((x, y) => x + y, 0) / d.length : 0, cw = Math.floor(w0 / K);
+  pxFont(g, 'CHAQUE COLONNE (MOYENNE)', x0, 128, '#8f7bb8', 5);
+  col.forEach((d, l) => {
+    const m = avg(d), h = Math.round(Math.max(-1, Math.min(1, m / .03)) * 20), x = x0 + l * cw;
+    px(g, '#2b2468', x, 160, cw - 6, 1); px(g, rh.L.cols[l], x + 2, h > 0 ? 160 - h : 161, cw - 10, Math.max(1, Math.abs(h)));
+    pxFont(g, KEY_NAME(RH.KEYS[l][0]) + ' ' + rhMs(Math.round(m * 1000)), x + (cw - 6) / 2, 196, '#d9c6ff', 5, 'center');
+  });
+  const s = rhDtStats(rh.dts), sk = rh.skills, main = rhMainSkill(sk);
+  [['Moyenne ' + rhMs(s.mean), '#d9c6ff'], ['Écart-type ' + s.sd + ' ms', '#d9c6ff'], ['UR ' + s.sd * 10, '#d9c6ff'], ['Difficulté ' + sk.overall, '#7fe0ee'], [rhSkillName(main) + ' ' + sk[main] + ' · endurance ' + sk.stamina, '#7fe0ee']]
+    .forEach(([t, c], i) => pxFont(g, t, hx, 128 + i * 15, c, 5));
+  const worst = col.map((d, l) => [l, avg(d), d.length]).filter(x => x[2] >= 5).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
+  $('rhAnaTxt').textContent = !worst || Math.abs(worst[1]) < .005 ? 'Tes colonnes sont bien calées.' : 'Ta colonne ' + KEY_NAME(RH.KEYS[worst[0]][0]) + (worst[1] > 0 ? ' est en retard de ' : ' est en avance de ') + Math.round(Math.abs(worst[1]) * 1000) + ' ms.';
+  if (rh.section) return $('rhAnaBtns').replaceChildren();
+  const seg = 4, S = new Map();
+  for (const [t, , dt] of rh.hits) { const k = Math.floor(t / seg), v = S.get(k) || {k, n: 0, p: 0, miss: 0}, w = dt == null ? null : R.find(w => Math.abs(dt) <= w[0]); v.n++; v.p += w ? {PARFAIT: 3, BIEN: 2, OK: 1}[w[1]] : 0; if (!w) v.miss++; S.set(k, v); }
+  const bad = [...S.values()].filter(v => v.n >= 4).map(v => ({...v, acc: v.p / (v.n * 3)})).filter(v => v.acc < .85 || v.miss).sort((a, b) => a.acc - b.acc).slice(0, 3);
+  $('rhAnaBtns').replaceChildren(...(bad.length ? bad.map(v => { const b = el('button', 'btn px', 'S\'ENTRAÎNER ' + clock(v.k * seg) + '–' + clock(v.k * seg + seg) + ' · ' + Math.round(v.acc * 100) + ' %'); b.onclick = () => rhSectionStart(v.k * seg - 1, v.k * seg + seg + 1); return b; }) : [el('span', 'hint', 'Aucun passage vraiment raté : bravo !')]));
+}
+const rhSfx = () => (+$('rhK').value !== 4 ? '@' + $('rhK').value + 'k' : '') + (+$('rhRate').value !== 1 ? '@x' + +$('rhRate').value : '');
 function rhDiffRow(key, sel, play, imp) {
-  const res = games?.rhythm || {}, row = el('div', 'row');
-  if (imp?.stars) { const d = 'S' + imp.stars, r = res[key + d], b = el('button', 'btn px' + (sel && rh?.diff === d ? ' main' : ''), 'JOUER · ' + imp.stars + '★' + (r ? ' · ' + r.grade : '')); if (r) b.title = r.score + ' points · ' + r.acc + ' % · combo ' + r.combo; b.onclick = () => play(d); row.append(b); return row; }
+  const res = games?.rhythm || {}, row = el('div', 'row'), sf = rhSfx();
+  if (imp?.stars) { const d = 'S' + imp.stars, r = res[key + d + sf], b = el('button', 'btn px' + (sel && rh?.diff === d ? ' main' : ''), 'JOUER · ' + imp.stars + '★' + (r ? ' · ' + r.grade : '')); if (r) b.title = r.score + ' points · ' + r.acc + ' % · combo ' + r.combo; b.onclick = () => play(d); row.append(b); return row; }
   for (const [d, label] of Object.entries(RH_DIFFS)) {
-    const r = res[key + d], b = el('button', 'btn px' + (sel && rh?.diff === d ? ' main' : ''), label + (r ? ' · ' + r.grade : ''));
+    const r = res[key + d + sf], b = el('button', 'btn px' + (sel && rh?.diff === d ? ' main' : ''), label + (r ? ' · ' + r.grade : ''));
     if (r) b.title = r.score + ' points · ' + r.acc + ' % · combo ' + r.combo;
     b.onclick = () => play(d); row.append(b);
   }
@@ -1048,11 +1545,57 @@ function rhPager(order) {  // 1200 chansons : 50 par page (sinon la liste est tr
     r.append(a, el('span', 'hint', (rhPage * 50 + 1) + '–' + Math.min(order.length, rhPage * 50 + 50) + ' / ' + order.length), b); return r;
   };
 }
+const rhRow = (...x) => { const r = el('div', 'row'); r.append(...x); return r; };
+const rhSel = (id, opts, v) => { const s = el('select', 'f gSel'); s.id = id; for (const [val, t] of opts) { const o = el('option', '', t); o.value = val; s.append(o); } s.value = v; return s; };
+function rhTrainCards() {
+  const p = RP(), c1 = el('div', 'sysCard px rhSong'), sk = rhSel('rhExSk', Object.entries(RH_EX), p.exSk || 'stream');
+  const bp = rhSel('rhExBpm', Array.from({length: 17}, (_, i) => [String(100 + i * 10), (100 + i * 10) + ' BPM']), p.exBpm || '160'), mn = rhSel('rhExMin', [['1', '1 min'], ['2', '2 min'], ['3', '3 min'], ['5', '5 min']], p.exMin || '2');
+  const go = el('button', 'btn main px', 'JOUER L\'EXERCICE');
+  go.onclick = () => { Object.assign(RP(), {exSk: sk.value, exBpm: bp.value, exMin: mn.value}); saveGames(); rhSelect('ex:' + sk.value + ':' + bp.value + ':' + mn.value, 'X'); };
+  const res = games.rhythm || {}, done = Object.entries(res).filter(([k]) => k.startsWith('rhe')).length;
+  c1.append(el('b', '', 'EXERCICES'), el('span', 'hint', 'Des motifs générés pour travailler une compétence, sur une batterie simple. Le nombre de voies vient des réglages.' + (done ? ' Exercices faits : ' + done + '.' : '')), rhRow(sk, bp, mn), rhRow(go));
+  const S = rh?.section, c2 = el('div', 'sysCard px rhSong');
+  c2.append(el('b', '', 'BOUCLE SUR UN PASSAGE'), el('span', 'hint', S ? 'En cours : ' + clock(S.a) + '–' + clock(S.b) + ' à ×' + S.rate.toFixed(2) + ' · ' + S.wins + ' réussite' + (S.wins > 1 ? 's' : '') + '.'
+    : 'Après une partie, l\'analyse propose tes passages les plus ratés : le passage tourne en boucle au ralenti, et accélère de 5 % à chaque réussite.'));
+  if (S) { const b = el('button', 'btn px', 'ARRÊTER LA BOUCLE'); b.onclick = rhSectionStop; c2.append(rhRow(b)); }
+  const c3 = el('div', 'sysCard px rhSong'); c3.append(el('b', '', 'TAUX DE LECTURE'), el('span', 'hint', 'Le réglage Taux (0,5× à 2×) joue tout le morceau plus lentement ou plus vite, sans changer la hauteur de la musique. Chaque taux garde ses propres records.'));
+  return [c1, c2, c3];
+}
+function rhProgCards() {
+  const D = rhDaily(), dd = (games.rhDaily || {})[D.day], c1 = el('div', 'sysCard px rhSong'), b1 = el('button', 'btn main px', dd ? 'REJOUER · ' + dd.g : 'JOUER LE DÉFI');
+  b1.onclick = () => rhSelect(D.i, D.diff, {over: D.o, daily: D.day});
+  c1.append(el('b', '', 'DÉFI DU JOUR'), el('span', 'hint', RH_SONGS[D.i].name + ' · ' + RH_DIFFS[D.diff] + ' · ' + D.mod), el('span', 'hint', 'Réussi avec C ou mieux. Jours de suite : ' + rhStreak() + '.'), rhRow(b1));
+  const R = rhRatings(), c2 = el('div', 'sysCard px rhSong');
+  c2.append(el('b', '', 'CEINTURES · NIVEAU ' + R.overall));
+  for (const [k, name] of RH_SKILLS) { const v = R[k], i = rhBelt(v), nx = RH_BELTS[i + 1], s = el('span', 'hint', name + ' ' + v + ' : ceinture ' + RH_BELTS[i][1] + (nx ? ' (' + nx[1] + ' à ' + nx[0] + ')' : '')); s.style.color = RH_BELTS[i][2]; c2.append(s); }
+  c2.append(el('span', 'hint', 'Ton niveau dans chaque compétence : la moyenne de tes 5 meilleures parties, selon la difficulté du morceau et ta précision (95 % compte en entier).'));
+  const DN = games.rhDans || {}, c3 = el('div', 'sysCard px rhSong'), r3 = el('div', 'row');
+  c3.append(el('b', '', 'PARCOURS DE DANS'), el('span', 'hint', '4 morceaux d\'affilée, sans pause. La vie baisse à chaque erreur et ne remonte jamais. Chaque dan ouvre le suivant.'));
+  for (let d = 1; d <= 10; d++) {
+    const ok = DN[d], b = el('button', 'btn px' + (ok ? ' main' : ''), rhDanName(d) + (ok ? ' · ' + ok.acc + ' %' : ''));
+    b.disabled = d > 1 && !DN[d - 1]; b.title = rhDanSongs(d).map(s => RH_SONGS[s.i].name).join(' · ') + (RH_DAN(d).rate !== 1 ? ' · ×' + RH_DAN(d).rate : '');
+    b.onclick = () => rhCourseStart(d); r3.append(b);
+  }
+  c3.append(r3);
+  return [c1, c2, c3];
+}
+function rhChartCards() {  // les maps importées (osu!mania, StepMania, Quaver) : une carte par map, un bouton par difficulté
+  const res = games?.rhythm || {}, sf = +$('rhRate').value !== 1 ? '@x' + +$('rhRate').value : '';
+  return rhCharts().map(s => {
+    const c = el('div', 'sysCard px rhSong' + (rh?.song === s.id ? ' on' : '')), x = el('button', 'rhDel', '×'), row = el('div', 'row');
+    x.title = 'Retirer cette map'; x.onclick = async () => { await rhChartDrop(s.id); rhList(); };
+    s.diffs.forEach((d, k) => { const r = res['rhc' + s.id + '|' + d.v + sf], b = el('button', 'btn px' + (rh?.song === s.id && rh?.diff === 'C' + k ? ' main' : ''), d.v + ' · ' + d.K + 'K · ' + d.msd + (r ? ' · ' + r.grade : '')); b.onclick = () => rhSelect(s.id, 'C' + k).catch(e => toast('Impossible : ' + e.message)); row.append(b); });
+    c.append(x, el('b', '', s.name), el('span', 'hint', s.src + ' · ' + s.diffs.length + ' difficulté' + (s.diffs.length > 1 ? 's' : '')), row);
+    return c;
+  });
+}
 function rhList() {
-  $('rhTabSongs').classList.toggle('on', rhTab === 'songs'); $('rhTabMine').classList.toggle('on', rhTab === 'mine');
-  $('rhTabMine').textContent = 'MES MUSIQUES · ' + rhImports().length;
+  for (const [id, t] of [['rhTabSongs', 'songs'], ['rhTabMine', 'mine'], ['rhTabTrain', 'train'], ['rhTabProg', 'prog']]) $(id).classList.toggle('on', rhTab === t);
+  $('rhTabMine').textContent = 'MES MUSIQUES · ' + (rhImports().length + rhCharts().length);
   $('rhImport').style.display = rhTab === 'mine' ? '' : 'none';
   if (rhTab === 'mine' && !$('rhMuList').options.length) rhFillNeoMusic();
+  if (rhTab === 'train') return $('rhSongs').replaceChildren(...rhTrainCards());
+  if (rhTab === 'prog') return $('rhSongs').replaceChildren(...rhProgCards());
   if (rhTab === 'songs') {
     const res = games?.rhythm || {}, done = RH_SONGS.filter((_, i) => Object.keys(RH_DIFFS).some(d => res['rh' + i + d])).length;
     $('rhTabSongs').textContent = 'CHANSONS · ' + done + ' / ' + RH_SONGS.length;
@@ -1064,15 +1607,15 @@ function rhList() {
       return c;
     }), bar());
   }
-  const list = rhImports();
-  $('rhSongs').replaceChildren(...(list.length ? list.map(imp => {
+  const list = rhImports(), charts = rhChartCards();
+  $('rhSongs').replaceChildren(...list.map(imp => {
     const c = el('div', 'sysCard px rhSong' + (rh?.song === imp.id ? ' on' : '')), x = el('button', 'rhDel', '×');
     x.title = 'Retirer ce niveau (la musique reste dans NeoMusic)';
     x.onclick = () => { games.rhythmImports = list.filter(o => o !== imp); rhAnalysed.delete(imp.id); saveGames(); rhList(); };
     c.append(x, el('b', '', imp.name), el('span', 'hint', (imp.bpm ? imp.bpm + ' BPM · ' + clock(imp.len || 0) : 'pas encore analysée') + (imp.url ? ' · YouTube' : ' · fichier')),
       rhDiffRow('rhx' + imp.id, rh?.song === imp.id, d => { $('rhImpMsg').textContent = 'Préparation du niveau…'; rhSelect(imp.id, d).then(() => $('rhImpMsg').textContent = '', e => $('rhImpMsg').textContent = 'Impossible : ' + e.message); }, imp));
     return c;
-  }) : [el('span', 'hint', 'Importe un fichier audio, ou choisis une musique de NeoMusic : le jeu trouve son tempo et ses temps forts et en fait 4 niveaux.')]));
+  }), ...charts, ...(list.length || charts.length ? [] : [el('span', 'hint', 'Importe un fichier audio, ou choisis une musique de NeoMusic : le jeu trouve son tempo et ses temps forts et en fait 4 niveaux. Tu peux aussi importer des maps d\'osu!mania, de StepMania ou de Quaver.')]));
 }
 async function rhFillNeoMusic() {  // the songs of NeoMusic's library, to make a level from one
   try { await muLoad(); } catch {}
@@ -1080,8 +1623,27 @@ async function rhFillNeoMusic() {  // the songs of NeoMusic's library, to make a
   $('rhMuList').replaceChildren(...(songs.length ? songs.map(t => { const o = el('option', '', (t.display_title || t.file).slice(0, 70)); o.value = muId(t); return o; }) : [el('option', '', 'Aucune musique dans NeoMusic')]));
   $('rhMuList')._songs = songs; $('rhMuBtn').disabled = !songs.length;
 }
+// ce que la 1.9.0 ajoute à la page : deux onglets, une carte de réglages de jeu, l'import de maps et la carte d'analyse
+{
+  const tabs = $('rhTabMine').parentElement;
+  for (const [id, t] of [['rhTabTrain', 'ENTRAÎNEMENT'], ['rhTabProg', 'PROGRÈS']]) { const b = el('button', 'tab px', t); b.id = id; tabs.append(b); }
+  const imp = $('rhImport'), r = el('div', 'row'), bt = el('button', 'btn px', 'IMPORTER UNE MAP (OSU!MANIA, STEPMANIA, QUAVER)'), fi = el('input');
+  bt.id = 'rhChartBtn'; fi.type = 'file'; fi.id = 'rhChartFile'; fi.multiple = true; fi.hidden = true; fi.accept = '.osz,.osu,.sm,.ssc,.qp,.qua,.zip,audio/*,image/*';
+  r.append(bt, fi); imp.insertBefore(r, $('rhImpMsg'));
+  bt.onclick = () => fi.click();
+  fi.onchange = async () => { const f = [...fi.files]; fi.value = ''; if (!f.length) return; try { rhTab = 'mine'; await rhChartsImport(f); } catch (e) { $('rhImpMsg').textContent = 'Import impossible : ' + e.message; } };
+  const box = el('div', 'sysCard px rhOpts'); box.id = 'rhOpts2';
+  for (const [id, label, opts, v] of RH_OPT) { const l = el('label', '', label + ' '); l.append(rhSel(id, opts, v)); box.append(l); }
+  view.querySelector('.rhOpts').after(box);
+  const ana = el('div', 'sysCard px'); ana.id = 'rhAna'; ana.hidden = true;
+  const ac = el('canvas'); ac.id = 'rhAnaC'; ac.width = 480; ac.height = 204;
+  const at = el('span', 'hint'); at.id = 'rhAnaTxt'; const ab = el('div', 'row'); ab.id = 'rhAnaBtns';
+  ana.append(el('b', '', 'ANALYSE DE LA PARTIE'), ac, at, ab); view.querySelector('.rhMain').after(ana);
+}
 $('rhTabSongs').onclick = () => { rhTab = 'songs'; rhList(); };
 $('rhTabMine').onclick = () => { rhTab = 'mine'; rhList(); rhFillNeoMusic(); };
+$('rhTabTrain').onclick = () => { rhTab = 'train'; rhList(); };
+$('rhTabProg').onclick = () => { rhTab = 'prog'; rhList(); };
 $('rhFileBtn').onclick = () => $('rhFile').click();
 $('rhFile').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
@@ -1093,14 +1655,19 @@ setInterval(() => { if (rhCtx?.state === 'running' && (!view.classList.contains(
 $('rhCanvas').onpointerdown = e => {
   if (!rh) return;
   if (rh.mode !== 'play') return rhPress();
-  const r = e.currentTarget.getBoundingClientRect(), lane = Math.floor(((e.clientX - r.left) / r.width * RH.W - RH.X0) / RH.LW);
-  if (lane >= 0 && lane < 4) { rhKey(lane, true); const up = () => { rhKey(lane, false); removeEventListener('pointerup', up); }; addEventListener('pointerup', up); }
+  const r = e.currentTarget.getBoundingClientRect(), lane = Math.floor(((e.clientX - r.left) / r.width * RH.W - rh.L.X0) / rh.L.LW);
+  if (lane >= 0 && lane < rh.K) { rhKey(lane, true); const up = () => { rhKey(lane, false); removeEventListener('pointerup', up); }; addEventListener('pointerup', up); }
 };
 $('rhFs').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else $('rhCanvas').parentElement.requestFullscreen?.().catch(() => {}); };  // plein écran jusqu'à la fin de la partie
 $('rhOffset').addEventListener('change', () => { rhOffMs = +$('rhOffset').value; });
 $('rhClick').onchange = () => { rhAudio(); rhCtx.resume(); rhClick(); };  // le son choisi, pour l'entendre
 $('rhVol').oninput = () => { if (rhOut) rhOut.gain.value = +$('rhVol').value / 100 * .6; };
 for (const id of ['rhVol', 'rhClick', 'rhOffset']) $(id).addEventListener('change', () => { gstore('rhythmPrefs', {})[id] = $(id).value; saveGames(); });
+for (const [id] of RH_OPT) $(id).addEventListener('change', () => {  // un réglage de jeu changé : le niveau se refait avec (sauf en pleine partie)
+  RP()[id] = $(id).value; saveGames();
+  if (id === 'rhK') rhSetKeys(+$(id).value);
+  if (rh && rh.mode !== 'play' && !rh.course && !rh.section && ['rhK', 'rhRate', 'rhOD', 'rhHold', 'rhMine', 'rhSpd'].includes(id)) rhSelect(rh.song, rh.diff, {over: rh.over, daily: rh.daily}); else rhList();
+});
 
 document.addEventListener('keydown', e => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -1111,6 +1678,7 @@ document.addEventListener('keydown', e => {
     if (lane >= 0 && !e.repeat) rhKey(lane, true);
     if (k === ' ' && !e.repeat && rh.mode !== 'play') rhPress();
     if ((k === 'p' || k === 'Escape') && rh.mode === 'play') { rh.mode = 'pause'; rhCtx?.suspend(); }
+    else if (k === 'Escape' && rh.section && rh.mode !== 'play') rhSectionStop();
   }
 });
 
@@ -1120,20 +1688,26 @@ document.addEventListener('keyup', e => {
 });
 
 // les touches, réglables dans les options : clic sur une case, puis appui sur la nouvelle touche (Échap annule) ; une touche déjà prise échange sa place
-const KEY_NAME = k => k.length === 1 ? k.toUpperCase() : ({ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓'})[k] || k;
+// chaque nombre de voies garde ses touches
+const KEY_NAME = k => k === ' ' ? 'ESP' : k.length === 1 ? k.toUpperCase() : ({ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓'})[k] || k;
 const KEYS_BAN = [' ', 'p', 'Escape', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];  // jouer, pause, et les flèches qui restent toujours actives
-function keysSet(ks) { ks.forEach((k, i) => { RH.KEYS[i][0] = k; }); document.querySelectorAll('.rhKeys button').forEach((b, i) => { b.textContent = KEY_NAME(RH.KEYS.map(k => k[0])[i]); }); }
-function keysUi() {  // construit au premier rhOpen : les réglages du jeu sont alors définis
-  if (document.querySelector('.rhKeys')) return;
+function keysSet(ks) { ks.forEach((k, i) => { RH.KEYS[i][0] = k; }); document.querySelectorAll('.rhKeys button').forEach((b, i) => { b.textContent = KEY_NAME(RH.KEYS[i][0]); }); }
+function rhSetKeys(K) {
+  const s = K === 4 ? '' : K, p = RP(), ks = Array.isArray(p['keys' + s]) && p['keys' + s].length === K ? p['keys' + s] : RH_KEYSETS[K] || RH_KEYSETS[4];
+  if (RH.KEYS.length === ks.length && RH.KEYS.every((k, i) => k[0] === ks[i]) && document.querySelector('.rhKeys')) return;
+  RH.KEYS = ks.map((k, i) => K === 4 ? [k, RH_ARROWS[i]] : [k]); keysUi();
+}
+function keysUi() {
+  document.querySelector('.rhKeys')?.remove();
   const box = document.createElement('label'); box.className = 'rhKeys'; box.append('Touches ');
-  RH.KEYS.map(k => k[0]).forEach((_, i) => {
-    const b = document.createElement('button'); b.className = 'btn px'; b.style.cssText = 'width:auto;min-width:30px;margin:0 2px;padding:2px 6px'; b.textContent = KEY_NAME(RH.KEYS.map(k => k[0])[i]); b.dataset.key = i;
+  RH.KEYS.forEach((_, i) => {
+    const b = document.createElement('button'); b.className = 'btn px'; b.style.cssText = 'width:auto;min-width:30px;margin:0 2px;padding:2px 6px'; b.textContent = KEY_NAME(RH.KEYS[i][0]); b.dataset.key = i;
     b.onclick = e => {
       e.preventDefault(); b.textContent = '?';
       const on = ev => {
         ev.preventDefault(); ev.stopPropagation(); removeEventListener('keydown', on, true);
-        const k = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key, ks = [...RH.KEYS.map(k => k[0])];
-        if (ev.key !== 'Escape' && !KEYS_BAN.includes(k) && k.length === 1) { const j = ks.indexOf(k); if (j >= 0) ks[j] = ks[i]; ks[i] = k; gstore('rhythmPrefs', {}).keys = ks; saveGames(); }
+        const K = RH.KEYS.length, k = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key, ks = [...RH.KEYS.map(k => k[0])];
+        if (ev.key !== 'Escape' && !KEYS_BAN.includes(k) && k.length === 1) { const j = ks.indexOf(k); if (j >= 0) ks[j] = ks[i]; ks[i] = k; RP()['keys' + (K === 4 ? '' : K)] = ks; saveGames(); }
         keysSet(ks); b.blur();
       };
       addEventListener('keydown', on, true);
@@ -1144,14 +1718,12 @@ function keysUi() {  // construit au premier rhOpen : les réglages du jeu sont 
 }
 
 function rhOpen() {
-  const p = games.rhythmPrefs || {}; for (const id of ['rhVol', 'rhClick', 'rhOffset']) if (p[id] != null) $(id).value = p[id];
-  keysUi();
-  if (Array.isArray(p.keys) && p.keys.length === RH.KEYS.length) keysSet(p.keys);
+  const p = games.rhythmPrefs || {}; for (const id of ['rhVol', 'rhClick', 'rhOffset', ...RH_OPT.map(o => o[0])]) if (p[id] != null) $(id).value = p[id];
+  rhSetKeys(+$('rhK').value);
   rhOffMs = +$('rhOffset').value;
   if (rh) { rhList(); return gameLoop(rh, 'neodex:rhythm', rhUpdate, rhDraw); }
   const last = games.rhythmLast || {song: 0, diff: 'normal'}; rhSelect(last.song, last.diff).catch(() => rhSelect(0, 'normal'));  // an imported music may be missing on this PC
 }  // (non indenté : les textes sur plusieurs lignes restent exactement les tiens)
-  // ---- fin ----
   ctx.onOpen(() => { rhOpen(); });
 }
 

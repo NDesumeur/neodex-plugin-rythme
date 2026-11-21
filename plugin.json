@@ -1,9 +1,9 @@
 {
   "id": "neodex.rythme",
   "name": "Rythme",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "author": "NDesumeur",
-  "description": "Jeu de rythme sur 4 voies : appuie sur D, F, J, K (ou les flèches) quand les notes touchent la ligne, et maintiens les notes longues. 1200 morceaux composés et joués par le jeu, chacun en Facile, Normal, Difficile et Expert, ou des niveaux créés depuis un fichier audio ou ta bibliothèque NeoMusic. Parfait, Bien ou OK, combo, note de S à D et décalage réglé tout seul. L'écran de fin montre la courbe de précision le long du morceau.",
+  "description": "Jeu de rythme de 4 à 7 voies : appuie sur la bonne touche quand les notes touchent la ligne, et maintiens les notes longues. 1200 morceaux composés et joués par le jeu, des niveaux créés depuis ta musique, et l'import de maps osu!mania, StepMania et Quaver. Taux de lecture sans changer la hauteur, sévérité réglable, mines, exercices par compétence, boucle sur un passage raté, défi du jour, ceintures et parcours de dans. Après chaque partie : l'analyse de tes frappes, colonne par colonne.",
   "icon": "icon.png",
   "entry": "index.js",
   "view": "rythme",
